@@ -90,19 +90,26 @@ if %ERRORLEVEL% equ 0 (
 
 :: 8. Check for uncommitted local changes
 set "STATUS_TMP=%TEMP%\yimly_status_%RANDOM%.tmp"
+set "FILTERED_TMP=%TEMP%\yimly_filtered_%RANDOM%.tmp"
 git status --porcelain > "!STATUS_TMP!" 2>&1
+
+:: Filter out allowed local-only directories/files: backups/ and .env
+findstr /v /i /c:" backups/" /c:" backups" /c:" .env" "!STATUS_TMP!" > "!FILTERED_TMP!" 2>nul
+
 set "DIRTY_COUNT=0"
-for /f %%A in ('type "!STATUS_TMP!" 2^>nul ^| find /c /v ""') do set "DIRTY_COUNT=%%A"
+for /f %%A in ('type "!FILTERED_TMP!" 2^>nul ^| find /c /v ""') do set "DIRTY_COUNT=%%A"
 if !DIRTY_COUNT! gtr 0 (
-    echo [ERROR] Uncommitted local changes detected.
+    echo [ERROR] Uncommitted local changes detected in tracked repository files.
     echo.
-    git status --short
+    type "!FILTERED_TMP!"
     echo.
     echo Please commit or stash your local modifications before updating.
     del "!STATUS_TMP!" >nul 2>&1
+    del "!FILTERED_TMP!" >nul 2>&1
     goto :fail
 )
 del "!STATUS_TMP!" >nul 2>&1
+del "!FILTERED_TMP!" >nul 2>&1
 
 echo All repository and environment checks passed.
 echo.
