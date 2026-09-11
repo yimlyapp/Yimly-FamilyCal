@@ -1,5 +1,42 @@
 export type UserRole = 'administrator' | 'adult' | 'child';
 
+export type PermissionKey =
+  | 'calendar_view'
+  | 'calendar_create'
+  | 'calendar_edit'
+  | 'calendar_delete'
+  | 'calendar_assign'
+  | 'event_view'
+  | 'event_create'
+  | 'event_edit_all'
+  | 'event_edit_own'
+  | 'event_edit_assigned'
+  | 'event_delete_all'
+  | 'event_delete_own'
+  | 'event_delete_assigned'
+  | 'members_view'
+  | 'members_manage'
+  | 'google_calendar_manage';
+
+export interface UserPermissions {
+  calendar_view: boolean;
+  calendar_create: boolean;
+  calendar_edit: boolean;
+  calendar_delete: boolean;
+  calendar_assign: boolean;
+  event_view: boolean;
+  event_create: boolean;
+  event_edit_all: boolean;
+  event_edit_own: boolean;
+  event_edit_assigned: boolean;
+  event_delete_all: boolean;
+  event_delete_own: boolean;
+  event_delete_assigned: boolean;
+  members_view: boolean;
+  members_manage: boolean;
+  google_calendar_manage: boolean;
+}
+
 export interface User {
   id: string;
   family_id: string;
@@ -11,6 +48,7 @@ export interface User {
   color?: string;
   birthday?: string;
   is_active?: number;
+  permissions?: UserPermissions;
 }
 
 export interface Family {
@@ -34,6 +72,10 @@ export interface FamilyMember {
   user_email?: string | null;
   user_username?: string | null;
   user_is_active?: number | null;
+  user_permissions?: string | null;
+  permissions?: Partial<UserPermissions> | null;
+  resolved_permissions?: UserPermissions;
+  is_custom_permissions?: boolean;
   has_login?: number | boolean;
 }
 
@@ -150,3 +192,154 @@ export interface SystemStats {
 }
 
 export type CalendarViewMode = 'month' | 'week' | 'day' | 'agenda';
+
+export const DEFAULT_MEMBER_PERMISSIONS: UserPermissions = {
+  calendar_view: true,
+  calendar_create: false,
+  calendar_edit: false,
+  calendar_delete: false,
+  calendar_assign: false,
+  event_view: true,
+  event_create: true,
+  event_edit_own: true,
+  event_edit_assigned: true,
+  event_edit_all: false,
+  event_delete_own: true,
+  event_delete_assigned: false,
+  event_delete_all: false,
+  members_view: true,
+  members_manage: false,
+  google_calendar_manage: false,
+};
+
+export const ADMIN_PERMISSIONS: UserPermissions = {
+  calendar_view: true,
+  calendar_create: true,
+  calendar_edit: true,
+  calendar_delete: true,
+  calendar_assign: true,
+  event_view: true,
+  event_create: true,
+  event_edit_own: true,
+  event_edit_assigned: true,
+  event_edit_all: true,
+  event_delete_own: true,
+  event_delete_assigned: true,
+  event_delete_all: true,
+  members_view: true,
+  members_manage: true,
+  google_calendar_manage: true,
+};
+
+export interface PermissionDefinition {
+  key: PermissionKey;
+  label: string;
+  description: string;
+  category: 'calendars' | 'events' | 'family' | 'google';
+}
+
+export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
+  // Calendars
+  {
+    key: 'calendar_view',
+    label: 'View calendars',
+    description: 'View household and assigned calendars',
+    category: 'calendars',
+  },
+  {
+    key: 'calendar_create',
+    label: 'Create calendars',
+    description: 'Create new calendars for the household',
+    category: 'calendars',
+  },
+  {
+    key: 'calendar_edit',
+    label: 'Edit calendars',
+    description: 'Change calendar names, colors, and settings',
+    category: 'calendars',
+  },
+  {
+    key: 'calendar_delete',
+    label: 'Delete calendars',
+    description: 'Delete existing calendars from the household',
+    category: 'calendars',
+  },
+  {
+    key: 'calendar_assign',
+    label: 'Assign calendars to members',
+    description: 'Change calendar member assignments and ownership',
+    category: 'calendars',
+  },
+
+  // Events
+  {
+    key: 'event_view',
+    label: 'View events',
+    description: 'View calendar events across the household',
+    category: 'events',
+  },
+  {
+    key: 'event_create',
+    label: 'Create events',
+    description: 'Create new events on available calendars',
+    category: 'events',
+  },
+  {
+    key: 'event_edit_all',
+    label: 'Edit all events',
+    description: 'Edit any event in the entire household',
+    category: 'events',
+  },
+  {
+    key: 'event_edit_assigned',
+    label: 'Edit events assigned to me',
+    description: 'Edit events where this member is an assigned attendee',
+    category: 'events',
+  },
+  {
+    key: 'event_edit_own',
+    label: 'Edit own events',
+    description: 'Edit events created by this member',
+    category: 'events',
+  },
+  {
+    key: 'event_delete_all',
+    label: 'Delete all events',
+    description: 'Delete any event in the entire household',
+    category: 'events',
+  },
+  {
+    key: 'event_delete_assigned',
+    label: 'Delete events assigned to me',
+    description: 'Delete events where this member is an assigned attendee',
+    category: 'events',
+  },
+  {
+    key: 'event_delete_own',
+    label: 'Delete own events',
+    description: 'Delete events created by this member',
+    category: 'events',
+  },
+
+  // Family
+  {
+    key: 'members_view',
+    label: 'View family members',
+    description: 'View the list of family members and household profile',
+    category: 'family',
+  },
+  {
+    key: 'members_manage',
+    label: 'Manage family members',
+    description: 'Add, edit, remove family members and configure logins/permissions',
+    category: 'family',
+  },
+
+  // Integrations
+  {
+    key: 'google_calendar_manage',
+    label: 'Manage Google Integrations',
+    description: 'Connect Google accounts and manage two-way synchronization',
+    category: 'google',
+  },
+];

@@ -39,6 +39,7 @@ export function initDatabase() {
       color TEXT DEFAULT '#FF4FA3',
       birthday TEXT,
       is_active INTEGER DEFAULT 1,
+      permissions TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
@@ -54,6 +55,7 @@ export function initDatabase() {
       avatar_url TEXT,
       birthday TEXT,
       is_active INTEGER DEFAULT 1,
+      permissions TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
@@ -201,6 +203,20 @@ export function initDatabase() {
       db.prepare(`ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;`).run();
       db.prepare(`UPDATE users SET is_active = 1 WHERE is_active IS NULL;`).run();
       console.log('Migration applied: added is_active column to users table.');
+    }
+
+    const hasUserPermissions = userCols.some((col) => col.name === 'permissions');
+    if (!hasUserPermissions) {
+      db.prepare(`ALTER TABLE users ADD COLUMN permissions TEXT;`).run();
+      console.log('Migration applied: added permissions column to users table.');
+    }
+
+    // Safe startup migration: Ensure permissions column exists on family_members
+    const memberCols = db.prepare(`PRAGMA table_info(family_members);`).all() as Array<{ name: string }>;
+    const hasMemberPermissions = memberCols.some((col) => col.name === 'permissions');
+    if (!hasMemberPermissions) {
+      db.prepare(`ALTER TABLE family_members ADD COLUMN permissions TEXT;`).run();
+      console.log('Migration applied: added permissions column to family_members table.');
     }
 
     // Backfill username for existing administrator if null

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Family, FamilyMember } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import { User, Family, FamilyMember, PermissionKey, CalendarEvent } from '../types';
 import { api } from '../api/client';
 
 interface AuthContextType {
@@ -7,6 +7,10 @@ interface AuthContextType {
   family: Family | null;
   memberProfile: FamilyMember | null;
   isLoading: boolean;
+  isAdmin: boolean;
+  hasPermission: (key: PermissionKey) => boolean;
+  canEditEvent: (event?: CalendarEvent | null) => boolean;
+  canDeleteEvent: (event?: CalendarEvent | null) => boolean;
   login: (identifier: string, pass: string) => Promise<void>;
   register: (data: { familyName: string; name: string; email: string; password: string; color?: string; birthday?: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -39,6 +43,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  const isAdmin = user?.role === 'administrator';
+
+  const hasPermission = (key: PermissionKey): boolean => {
+    if (!user) return false;
+    if (user.role === 'administrator') return true;
+    if (!user.permissions) return false;
+    return Boolean(user.permissions[key]);
+  };
+
+  const canEditEvent = (event?: CalendarEvent | null): boolean => {
+    if (!user || !event) return false;
+    if (user.role === 'administrator') return true;
+    if (hasPermission('event_edit_all')) return true;
+
+    if (hasPermission('event_edit_own') && event.created_by === user.id) {
+      return true;
+    }
+
+    if (hasPermission('event_edit_assigned') && memberProfile?.id) {
+      if (Array.isArray(event.assigned_member_ids) && event.assigned_member_ids.includes(memberProfile.id)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const canDeleteEvent = (event?: CalendarEvent | null): boolean => {
+    if (!user || !event) return false;
+    if (user.role === 'administrator') return true;
+    if (hasPermission('event_delete_all')) return true;
+
+    if (hasPermission('event_delete_own') && event.created_by === user.id) {
+      return true;
+    }
+
+    if (hasPermission('event_delete_assigned') && memberProfile?.id) {
+      if (Array.isArray(event.assigned_member_ids) && event.assigned_member_ids.includes(memberProfile.id)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   const login = async (identifier: string, pass: string) => {
     setIsLoading(true);
@@ -99,6 +148,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         family,
         memberProfile,
         isLoading,
+        isAdmin,
+        hasPermission,
+        canEditEvent,
+        canDeleteEvent,
         login,
         register,
         logout,

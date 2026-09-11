@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
+import { useAuth } from '../../context/AuthContext';
 import { CalendarViewMode } from '../../types';
 
 export const CalendarHeader: React.FC = () => {
@@ -34,6 +35,10 @@ export const CalendarHeader: React.FC = () => {
   } = useCalendar();
 
   const { members, selectedMemberFilter, setSelectedMemberFilter } = useFamily();
+  const { hasPermission, isAdmin } = useAuth();
+
+  const canCreateEvent = isAdmin || hasPermission('event_create');
+  const canManageGoogle = isAdmin || hasPermission('google_calendar_manage');
 
   const handlePrev = () => {
     if (viewMode === 'month') setCurrentDate(subMonths(currentDate, 1));
@@ -103,7 +108,7 @@ export const CalendarHeader: React.FC = () => {
         {/* Right: Sync Status, View Mode Switcher, and Add Event Button */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Google Sync Button / Status */}
-          {isGoogleConnected && (
+          {isGoogleConnected && canManageGoogle && (
             <button
               id="cal-google-sync-btn"
               onClick={triggerGoogleSync}
@@ -135,15 +140,17 @@ export const CalendarHeader: React.FC = () => {
           </div>
 
           {/* Add Event Button */}
-          <button
-            id="cal-add-event-btn"
-            onClick={() => openCreateEventModal()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-lg shadow-[#FF4FA3]/25 hover:shadow-[#FF4FA3]/40 cursor-pointer active:scale-98"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Event</span>
-            <span className="sm:hidden">Add</span>
-          </button>
+          {canCreateEvent && (
+            <button
+              id="cal-add-event-btn"
+              onClick={() => openCreateEventModal()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-lg shadow-[#FF4FA3]/25 hover:shadow-[#FF4FA3]/40 cursor-pointer active:scale-98"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Event</span>
+              <span className="sm:hidden">Add</span>
+            </button>
+          )}
         </div>
       </div>
 

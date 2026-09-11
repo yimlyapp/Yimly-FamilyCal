@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
+import { useAuth } from '../../context/AuthContext';
 import { Calendar } from '../../types';
 import {
   X,
@@ -10,6 +11,7 @@ import {
   Globe,
   Loader2,
   Check,
+  Trash2,
 } from 'lucide-react';
 
 interface EditCalendarModalProps {
@@ -35,14 +37,19 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { updateCalendar } = useCalendar();
+  const { updateCalendar, deleteCalendar } = useCalendar();
   const { members } = useFamily();
+  const { hasPermission, isAdmin } = useAuth();
 
   const [name, setName] = useState('');
   const [color, setColor] = useState('#FF4FA3');
   const [memberId, setMemberId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const canDeleteCalendar = (isAdmin || hasPermission('calendar_delete')) && calendar?.is_default !== 1;
+  const canAssignCalendar = isAdmin || hasPermission('calendar_assign');
 
   useEffect(() => {
     if (calendar && isOpen) {
@@ -72,13 +79,31 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
       await updateCalendar(calendar.id, {
         name: name.trim(),
         color,
-        member_id: memberId || null,
+        member_id: canAssignCalendar ? (memberId || null) : calendar.member_id,
       });
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Failed to update calendar.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete "${calendar.name}"? All events on this calendar will also be removed.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      await deleteCalendar(calendar.id);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete calendar.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -170,30 +195,32 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
           </div>
 
           {/* Assigned Member dropdown */}
-          <div>
-            <label
-              htmlFor="edit-cal-member-select"
-              className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5"
-            >
-              <Users className="w-3.5 h-3.5 text-[#FF4FA3]" /> Assigned Member
-            </label>
-            <select
-              id="edit-cal-member-select"
-              value={memberId}
-              onChange={(e) => setMemberId(e.target.value)}
-              className="w-full bg-[#1A202C] border border-[#242C3D] text-xs text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#FF4FA3] cursor-pointer font-medium"
-            >
-              <option value="">Shared Household</option>
-              {activeMembers.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-gray-500 mt-1">
-              Assign to a specific member or leave as Shared Household.
-            </p>
-          </div>
+          {canAssignCalendar && (
+            <div>
+              <label
+                htmlFor="edit-cal-member-select"
+                className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5"
+              >
+                <Users className="w-3.5 h-3.5 text-[#FF4FA3]" /> Assigned Member
+              </label>
+              <select
+                id="edit-cal-member-select"
+                value={memberId}
+                onChange={(e) => setMemberId(e.target.value)}
+                className="w-full bg-[#1A202C] border border-[#242C3D] text-xs text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#FF4FA3] cursor-pointer font-medium"
+              >
+                <option value="">Shared Household</option>
+                {activeMembers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Assign to a specific member or leave as Shared Household.
+              </p>
+            </div>
+          )}
 
           {/* Google Calendar Informational Banner */}
           {isGoogle && (
@@ -213,25 +240,40 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
           )}
 
           {/* Form Actions */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#242C3D]">
-            <button
-              id="cancel-edit-calendar-button"
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white hover:bg-[#1A202C] transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              id="save-calendar-button"
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#FF4FA3] hover:bg-[#e63e90] transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-md shadow-[#FF4FA3]/20"
-            >
-              {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Save
-            </button>
+          <div className="flex items-center justify-between pt-3 border-t border-[#242C3D]">
+            {canDeleteCalendar ? (
+              <button
+                id="delete-calendar-button"
+                type="button"
+                onClick={handleDelete}
+                disabled={isSubmitting || isDeleting}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Delete
+              </button>
+            ) : <div />}
+
+            <div className="flex items-center gap-2">
+              <button
+                id="cancel-edit-calendar-button"
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting || isDeleting}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white hover:bg-[#1A202C] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                id="save-calendar-button"
+                type="submit"
+                disabled={isSubmitting || isDeleting}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#FF4FA3] hover:bg-[#e63e90] transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-md shadow-[#FF4FA3]/20"
+              >
+                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Save
+              </button>
+            </div>
           </div>
         </form>
       </div>

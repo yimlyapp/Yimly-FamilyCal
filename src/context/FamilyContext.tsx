@@ -16,6 +16,7 @@ interface FamilyContextType {
   removeMember: (id: string) => Promise<void>;
   manageMemberLogin: (id: string, data: { enabled: boolean; username?: string; password?: string }) => Promise<any>;
   updateHousehold: (data: { name?: string; timezone?: string }) => Promise<void>;
+  updateMemberPermissions: (id: string, data: { permissions?: Partial<import('../types').UserPermissions>; resetToDefaults?: boolean }) => Promise<FamilyMember>;
 }
 
 export const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
@@ -84,6 +85,12 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     setFamily(updated);
   };
 
+  const updateMemberPermissions = async (id: string, data: { permissions?: Partial<import('../types').UserPermissions>; resetToDefaults?: boolean }) => {
+    const updated = await api.updateMemberPermissions(id, data);
+    await fetchFamilyData();
+    return updated;
+  };
+
   return (
     <FamilyContext.Provider
       value={{
@@ -99,6 +106,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
         removeMember,
         manageMemberLogin,
         updateHousehold,
+        updateMemberPermissions,
       }}
     >
       {children}

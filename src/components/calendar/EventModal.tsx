@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { CalendarEvent, RecurrenceRule } from '../../types';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   X,
   Trash2,
@@ -40,6 +41,7 @@ export const EventModal: React.FC = () => {
   } = useCalendar();
 
   const { members } = useFamily();
+  const { hasPermission, isAdmin, canEditEvent, canDeleteEvent } = useAuth();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -56,6 +58,9 @@ export const EventModal: React.FC = () => {
   const [assignedMemberIds, setAssignedMemberIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const canSave = selectedEvent ? canEditEvent(selectedEvent) : (isAdmin || hasPermission('event_create'));
+  const canDelete = selectedEvent ? canDeleteEvent(selectedEvent) : false;
 
   // Initialize form when modal opens or selectedEvent changes
   useEffect(() => {
@@ -123,6 +128,10 @@ export const EventModal: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSave) {
+      setError('You do not have permission to save this event.');
+      return;
+    }
     if (!title.trim()) {
       setError('Event title is required.');
       return;
@@ -171,7 +180,7 @@ export const EventModal: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !canDelete) return;
     if (confirm('Are you sure you want to delete this event?')) {
       setIsSubmitting(true);
       try {
@@ -201,7 +210,7 @@ export const EventModal: React.FC = () => {
               style={{ backgroundColor: color }}
             />
             <h3 className="text-lg font-bold text-white tracking-tight">
-              {selectedEvent ? 'Edit Family Event' : 'Create New Event'}
+              {selectedEvent ? (canSave ? 'Edit Family Event' : 'Event Details') : 'Create New Event'}
             </h3>
             {isGoogle && (
               <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -234,10 +243,11 @@ export const EventModal: React.FC = () => {
               id="event-title-input"
               type="text"
               required
+              disabled={!canSave}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Family Pizza Night, Soccer Practice..."
-              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3] transition-colors"
+              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3] transition-colors disabled:opacity-70"
             />
           </div>
 
@@ -250,6 +260,7 @@ export const EventModal: React.FC = () => {
               <select
                 id="event-calendar-select"
                 value={calendarId}
+                disabled={!canSave}
                 onChange={(e) => {
                   const newCalId = e.target.value;
                   setCalendarId(newCalId);
@@ -261,11 +272,11 @@ export const EventModal: React.FC = () => {
                     }
                   }
                 }}
-                className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3] cursor-pointer disabled:opacity-70"
               >
-                {calendars.map((cal) => (
-                  <option key={cal.id} value={cal.id}>
-                    {cal.name} {cal.source === 'google' ? '(Google)' : ''}
+                {calendars.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.member_name ? `(${c.member_name})` : ''}
                   </option>
                 ))}
               </select>
@@ -275,15 +286,16 @@ export const EventModal: React.FC = () => {
               <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
                 <Palette className="w-3.5 h-3.5 text-[#FF4FA3]" /> Event Color
               </label>
-              <div className="flex items-center gap-1.5 pt-1">
+              <div className="flex items-center gap-1.5 pt-1 overflow-x-auto scrollbar-none">
                 {PRESET_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
+                    disabled={!canSave}
                     onClick={() => setColor(c)}
                     style={{ backgroundColor: c }}
-                    className={`w-6 h-6 rounded-full transition-transform cursor-pointer ${
-                      color === c ? 'ring-2 ring-white ring-offset-2 ring-offset-[#121620] scale-110' : 'opacity-80 hover:opacity-100'
+                    className={`w-6 h-6 rounded-full shrink-0 transition-transform ${
+                      color === c ? 'ring-2 ring-white ring-offset-2 ring-offset-[#121620] scale-110' : 'opacity-80'
                     }`}
                   />
                 ))}
@@ -291,144 +303,146 @@ export const EventModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Date and Time Pickers */}
-          <div className="p-3.5 rounded-2xl bg-[#0E111A] border border-[#242C3D]/60 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#FF4FA3]" /> Time & Schedule
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-300">
-                <input
-                  id="event-allday-checkbox"
-                  type="checkbox"
-                  checked={allDay}
-                  onChange={(e) => setAllDay(e.target.checked)}
-                  className="rounded bg-[#1A202C] border-[#242C3D] text-[#FF4FA3] focus:ring-[#FF4FA3] cursor-pointer"
-                />
-                All-Day Event
-              </label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] text-gray-400 block mb-0.5">Start Date</span>
-                <input
-                  type="date"
-                  required
-                  value={startDate}
-                  onChange={(e) => {
-                    setStartDate(e.target.value);
-                    if (!endDate || e.target.value > endDate) setEndDate(e.target.value);
-                  }}
-                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-                />
-              </div>
-
-              {!allDay && (
-                <div>
-                  <span className="text-[11px] text-gray-400 block mb-0.5">Start Time</span>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] text-gray-400 block mb-0.5">End Date</span>
-                <input
-                  type="date"
-                  required
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-                />
-              </div>
-
-              {!allDay && (
-                <div>
-                  <span className="text-[11px] text-gray-400 block mb-0.5">End Time</span>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recurrence Rule */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
-                <Repeat className="w-3.5 h-3.5 text-[#FF4FA3]" /> Repeat
-              </label>
-              <select
-                id="event-recurrence-select"
-                value={recurringRule}
-                onChange={(e) => setRecurringRule(e.target.value as RecurrenceRule)}
-                className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-              >
-                <option value="none">Does not repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-            </div>
-
-            {recurringRule !== 'none' && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Repeat Until (Optional)
-                </label>
-                <input
-                  type="date"
-                  value={recurringUntil}
-                  onChange={(e) => setRecurringUntil(e.target.value)}
-                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Family Member Assignment Multi-Select */}
+          {/* Assigned Family Members Chips */}
           <div>
             <label className="block text-xs font-semibold text-gray-300 mb-1.5 flex items-center gap-1">
-              <Users className="w-3.5 h-3.5 text-[#FF4FA3]" /> Assign Family Members
+              <Users className="w-3.5 h-3.5 text-[#FF4FA3]" /> Assigned Family Members
             </label>
             <div className="flex flex-wrap gap-2">
-              {members.map((member) => {
-                const isSelected = assignedMemberIds.includes(member.id);
+              {members.map((m) => {
+                const isAssigned = assignedMemberIds.includes(m.id);
                 return (
                   <button
-                    key={member.id}
+                    key={m.id}
                     type="button"
-                    onClick={() => toggleMemberAssignment(member.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer border ${
-                      isSelected
-                        ? 'bg-[#1A202C] text-white border-[#FF4FA3] shadow-xs'
-                        : 'bg-[#0E111A] text-gray-400 hover:text-white border-[#242C3D]'
-                    }`}
+                    disabled={!canSave}
+                    onClick={() => toggleMemberAssignment(m.id)}
+                    style={{
+                      backgroundColor: isAssigned ? `${m.color}25` : '#1A202C',
+                      borderColor: isAssigned ? m.color : '#242C3D',
+                      color: isAssigned ? '#FFFFFF' : '#94A3B8',
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs border transition-all cursor-pointer ${
+                      isAssigned ? 'font-semibold shadow-xs' : 'hover:border-gray-600'
+                    } disabled:opacity-70`}
                   >
                     <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: member.color || '#FF4FA3' }}
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: m.color }}
                     />
-                    <span>{member.name}</span>
+                    <span>{m.name}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Location Input */}
+          {/* Date & Time Row */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-gray-300 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-[#FF4FA3]" /> Time & Schedule
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  disabled={!canSave}
+                  checked={allDay}
+                  onChange={(e) => setAllDay(e.target.checked)}
+                  className="rounded bg-[#1A202C] border-[#242C3D] text-[#FF4FA3] focus:ring-[#FF4FA3]"
+                />
+                <span>All Day</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] text-gray-400 font-semibold block mb-1">Start</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    required
+                    disabled={!canSave}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                  />
+                  {!allDay && (
+                    <input
+                      type="time"
+                      required
+                      disabled={!canSave}
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-28 bg-[#1A202C] border border-[#242C3D] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-gray-400 font-semibold block mb-1">End</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    required
+                    disabled={!canSave}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                  />
+                  {!allDay && (
+                    <input
+                      type="time"
+                      required
+                      disabled={!canSave}
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-28 bg-[#1A202C] border border-[#242C3D] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recurrence Options */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
+                <Repeat className="w-3.5 h-3.5 text-[#FF4FA3]" /> Repeat
+              </label>
+              <select
+                value={recurringRule}
+                disabled={!canSave}
+                onChange={(e) => setRecurringRule(e.target.value as RecurrenceRule)}
+                className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3] cursor-pointer disabled:opacity-70"
+              >
+                <option value="none">Does not repeat</option>
+                <option value="daily">Every day</option>
+                <option value="weekly">Every week</option>
+                <option value="monthly">Every month</option>
+                <option value="yearly">Every year</option>
+              </select>
+            </div>
+
+            {recurringRule !== 'none' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                  Repeat Until
+                </label>
+                <input
+                  type="date"
+                  disabled={!canSave}
+                  value={recurringUntil}
+                  onChange={(e) => setRecurringUntil(e.target.value)}
+                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Location */}
           <div>
             <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-[#FF4FA3]" /> Location
@@ -436,10 +450,11 @@ export const EventModal: React.FC = () => {
             <input
               id="event-location-input"
               type="text"
+              disabled={!canSave}
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Home, School Gym, Central Park..."
-              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
+              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3] disabled:opacity-70"
             />
           </div>
 
@@ -451,16 +466,17 @@ export const EventModal: React.FC = () => {
             <textarea
               id="event-description-input"
               rows={3}
+              disabled={!canSave}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add details, packing list, or notes for the family..."
-              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl p-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3] resize-none"
+              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl p-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3] resize-none disabled:opacity-70"
             />
           </div>
 
           {/* Modal Actions */}
           <div className="flex items-center justify-between pt-3 border-t border-[#242C3D]">
-            {selectedEvent ? (
+            {selectedEvent && canDelete ? (
               <button
                 type="button"
                 id="event-delete-btn"
@@ -481,16 +497,18 @@ export const EventModal: React.FC = () => {
                 onClick={closeEventModal}
                 className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold transition-colors cursor-pointer"
               >
-                Cancel
+                {canSave ? 'Cancel' : 'Close'}
               </button>
-              <button
-                type="submit"
-                id="event-save-btn"
-                disabled={isSubmitting}
-                className="px-5 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-md shadow-[#FF4FA3]/25 cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? 'Saving...' : selectedEvent ? 'Update Event' : 'Create Event'}
-              </button>
+              {canSave && (
+                <button
+                  type="submit"
+                  id="event-save-btn"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-md shadow-[#FF4FA3]/25 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Saving...' : selectedEvent ? 'Update Event' : 'Create Event'}
+                </button>
+              )}
             </div>
           </div>
         </form>

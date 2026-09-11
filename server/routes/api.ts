@@ -5,6 +5,11 @@ import { db } from '../db.js';
 import {
   authenticateToken,
   requireAdmin,
+  requirePermission,
+  hasPermission,
+  canUserEditEvent,
+  canUserDeleteEvent,
+  getUserMemberId,
   optionalAuth,
   generateToken,
   hashPassword,
@@ -12,6 +17,15 @@ import {
   TOKEN_COOKIE_NAME,
   AuthRequest,
 } from '../auth.js';
+import {
+  PermissionKey,
+  UserPermissions,
+  resolveUserPermissions,
+  isCustomPermissions,
+  ALL_PERMISSION_KEYS,
+  DEFAULT_MEMBER_PERMISSIONS,
+  ADMIN_PERMISSIONS,
+} from '../permissions.js';
 
 // Helper to generate a unique username within a household
 export function generateUniqueUsername(familyId: string, baseName: string, excludeUserId?: string): string {
@@ -215,8 +229,13 @@ router.get('/auth/me', authenticateToken, (req: AuthRequest, res: Response) => {
       user.id
     );
 
+    const resolvedPerms = user.resolvedPermissions || resolveUserPermissions(user.role, user.permissions);
+
     res.json({
-      user,
+      user: {
+        ...user,
+        permissions: resolvedPerms,
+      },
       family,
       memberProfile,
     });
@@ -232,18 +251,41 @@ router.get('/auth/me', authenticateToken, (req: AuthRequest, res: Response) => {
 router.get('/family', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const family = db.prepare('SELECT * FROM families WHERE id = ?').get(req.user!.family_id);
-    const members = db.prepare(`
+    const rawMembers = db.prepare(`
       SELECT 
         m.*, 
         u.email as user_email,
         u.username as user_username,
         u.is_active as user_is_active,
+        u.permissions as user_permissions,
         CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
       FROM family_members m
       LEFT JOIN users u ON m.user_id = u.id
       WHERE m.family_id = ? AND m.is_active = 1
       ORDER BY m.created_at ASC
-    `).all(req.user!.family_id);
+    `).all(req.user!.family_id) as any[];
+
+    const members = rawMembers.map((m) => {
+      // Prioritize member's permissions or user's permissions
+      const rawPerms = m.permissions || m.user_permissions || null;
+      let parsedPerms: any = null;
+      if (rawPerms) {
+        try {
+          parsedPerms = typeof rawPerms === 'string' ? JSON.parse(rawPerms) : rawPerms;
+        } catch {
+          parsedPerms = null;
+        }
+      }
+      const resolved = resolveUserPermissions(m.role, parsedPerms);
+      const isCustom = isCustomPermissions(parsedPerms, m.role);
+
+      return {
+        ...m,
+        permissions: parsedPerms,
+        resolved_permissions: resolved,
+        is_custom_permissions: isCustom,
+      };
+    });
 
     res.json({ family, members });
   } catch (err: any) {
@@ -281,7 +323,11 @@ router.put('/family', authenticateToken, requireAdmin, (req: AuthRequest, res: R
 
 router.post('/family/members', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
-    const { name, role, color, avatar_url, birthday, login } = req.body;
+    if (!hasPermission(req.user, 'members_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to add family members.' });
+    }
+
+    const { name, role, color, avatar_url, birthday, login, permissions } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Member name is required.' });
     }
@@ -291,6 +337,17 @@ router.post('/family/members', authenticateToken, (req: AuthRequest, res: Respon
     const now = new Date().toISOString();
     const memberId = 'mem_' + uuidv4().slice(0, 8);
     let linkedUserId: string | null = null;
+    let permissionsJson: string | null = null;
+
+    if (permissions && typeof permissions === 'object') {
+      const sanitized: Record<string, boolean> = {};
+      for (const k of ALL_PERMISSION_KEYS) {
+        if (typeof permissions[k] === 'boolean') {
+          sanitized[k] = permissions[k];
+        }
+      }
+      permissionsJson = Object.keys(sanitized).length > 0 ? JSON.stringify(sanitized) : null;
+    }
 
     // Optional Member Login Account creation
     if (login && login.enabled) {
@@ -319,8 +376,8 @@ router.post('/family/members', authenticateToken, (req: AuthRequest, res: Respon
       const syntheticEmail = `${desiredUsername.toLowerCase().replace(/[^\w-]/g, '')}.${req.user!.family_id}@yimly.local`;
 
       db.prepare(`
-        INSERT INTO users (id, family_id, email, username, password_hash, name, role, color, birthday, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        INSERT INTO users (id, family_id, email, username, password_hash, name, role, color, birthday, is_active, permissions, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
       `).run(
         userId,
         req.user!.family_id,
@@ -331,6 +388,7 @@ router.post('/family/members', authenticateToken, (req: AuthRequest, res: Respon
         memberRole,
         memberColor,
         birthday || null,
+        permissionsJson,
         now,
         now
       );
@@ -339,8 +397,8 @@ router.post('/family/members', authenticateToken, (req: AuthRequest, res: Respon
     }
 
     db.prepare(`
-      INSERT INTO family_members (id, family_id, user_id, name, role, color, avatar_url, birthday, is_active, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      INSERT INTO family_members (id, family_id, user_id, name, role, color, avatar_url, birthday, is_active, permissions, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
     `).run(
       memberId,
       req.user!.family_id,
@@ -350,6 +408,7 @@ router.post('/family/members', authenticateToken, (req: AuthRequest, res: Respon
       memberColor,
       avatar_url || null,
       birthday || null,
+      permissionsJson,
       now
     );
 
@@ -359,13 +418,22 @@ router.post('/family/members', authenticateToken, (req: AuthRequest, res: Respon
         u.email as user_email,
         u.username as user_username,
         u.is_active as user_is_active,
+        u.permissions as user_permissions,
         CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
       FROM family_members m
       LEFT JOIN users u ON m.user_id = u.id
       WHERE m.id = ?
-    `).get(memberId);
+    `).get(memberId) as any;
 
-    res.status(201).json(newMember);
+    const rawPerms = newMember.permissions || newMember.user_permissions || null;
+    const parsedPerms = rawPerms ? JSON.parse(rawPerms) : null;
+
+    res.status(201).json({
+      ...newMember,
+      permissions: parsedPerms,
+      resolved_permissions: resolveUserPermissions(newMember.role, parsedPerms),
+      is_custom_permissions: isCustomPermissions(parsedPerms, newMember.role),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -382,6 +450,11 @@ router.put('/family/members/:id', authenticateToken, (req: AuthRequest, res: Res
     ) as any;
     if (!existing) {
       return res.status(404).json({ error: 'Member not found.' });
+    }
+
+    const isOwnProfile = existing.user_id === req.user!.id;
+    if (!isOwnProfile && !hasPermission(req.user, 'members_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to edit this family member.' });
     }
 
     // Role changes require admin permission
@@ -417,13 +490,97 @@ router.put('/family/members/:id', authenticateToken, (req: AuthRequest, res: Res
         u.email as user_email,
         u.username as user_username,
         u.is_active as user_is_active,
+        u.permissions as user_permissions,
         CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
       FROM family_members m
       LEFT JOIN users u ON m.user_id = u.id
       WHERE m.id = ?
-    `).get(id);
+    `).get(id) as any;
 
-    res.json(updated);
+    const rawPerms = updated.permissions || updated.user_permissions || null;
+    const parsedPerms = rawPerms ? JSON.parse(rawPerms) : null;
+
+    res.json({
+      ...updated,
+      permissions: parsedPerms,
+      resolved_permissions: resolveUserPermissions(updated.role, parsedPerms),
+      is_custom_permissions: isCustomPermissions(parsedPerms, updated.role),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only member permissions management
+router.put('/family/members/:id/permissions', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { permissions, resetToDefaults } = req.body;
+
+    const member = db.prepare('SELECT * FROM family_members WHERE id = ? AND family_id = ?').get(
+      id,
+      req.user!.family_id
+    ) as any;
+
+    if (!member) {
+      return res.status(404).json({ error: 'Family member not found.' });
+    }
+
+    let permissionsJson: string | null = null;
+
+    if (resetToDefaults === true) {
+      permissionsJson = null;
+    } else if (permissions && typeof permissions === 'object') {
+      const sanitized: Record<string, boolean> = {};
+      for (const k of ALL_PERMISSION_KEYS) {
+        if (typeof permissions[k] === 'boolean') {
+          sanitized[k] = permissions[k];
+        }
+      }
+      permissionsJson = Object.keys(sanitized).length > 0 ? JSON.stringify(sanitized) : null;
+    }
+
+    db.prepare('UPDATE family_members SET permissions = ? WHERE id = ? AND family_id = ?').run(
+      permissionsJson,
+      id,
+      req.user!.family_id
+    );
+
+    if (member.user_id) {
+      const now = new Date().toISOString();
+      db.prepare('UPDATE users SET permissions = ?, updated_at = ? WHERE id = ? AND family_id = ?').run(
+        permissionsJson,
+        now,
+        member.user_id,
+        req.user!.family_id
+      );
+    }
+
+    const updated = db.prepare(`
+      SELECT 
+        m.*, 
+        u.email as user_email,
+        u.username as user_username,
+        u.is_active as user_is_active,
+        u.permissions as user_permissions,
+        CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
+      FROM family_members m
+      LEFT JOIN users u ON m.user_id = u.id
+      WHERE m.id = ?
+    `).get(id) as any;
+
+    const rawPerms = updated.permissions || updated.user_permissions || null;
+    const parsedPerms = rawPerms ? JSON.parse(rawPerms) : null;
+
+    res.json({
+      ...updated,
+      permissions: parsedPerms,
+      resolved_permissions: resolveUserPermissions(updated.role, parsedPerms),
+      is_custom_permissions: isCustomPermissions(parsedPerms, updated.role),
+      message: resetToDefaults
+        ? 'Permissions reset to standard defaults.'
+        : 'Permissions successfully updated.',
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -573,9 +730,14 @@ router.post('/family/members/:id/login', authenticateToken, requireAdmin, (req: 
   }
 });
 
-router.delete('/family/members/:id', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+router.delete('/family/members/:id', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!hasPermission(req.user, 'members_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to delete family members.' });
+    }
+
     const member = db.prepare('SELECT * FROM family_members WHERE id = ? AND family_id = ?').get(
       id,
       req.user!.family_id
@@ -586,7 +748,12 @@ router.delete('/family/members/:id', authenticateToken, requireAdmin, (req: Auth
     }
 
     if (member.user_id === req.user!.id) {
-      return res.status(400).json({ error: 'You cannot remove your own administrator account.' });
+      return res.status(400).json({ error: 'You cannot remove your own account.' });
+    }
+
+    // Only administrators can remove other administrator accounts
+    if (member.role === 'administrator' && req.user!.role !== 'administrator') {
+      return res.status(403).json({ error: 'Only administrators can delete administrator accounts.' });
     }
 
     // Deactivate member
@@ -615,7 +782,10 @@ router.delete('/family/members/:id', authenticateToken, requireAdmin, (req: Auth
 
 router.get('/calendars', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
-    const calendars = db.prepare(`
+    const canViewAll = hasPermission(req.user, 'calendar_view');
+    const myMemberId = getUserMemberId(req.user!.id, req.user!.family_id);
+
+    let query = `
       SELECT 
         c.*,
         m.name as member_name,
@@ -623,9 +793,17 @@ router.get('/calendars', authenticateToken, (req: AuthRequest, res: Response) =>
       FROM calendars c
       LEFT JOIN family_members m ON c.member_id = m.id AND m.family_id = c.family_id
       WHERE c.family_id = ?
-      ORDER BY c.is_default DESC, c.name ASC
-    `).all(req.user!.family_id);
+    `;
+    const params: any[] = [req.user!.family_id];
 
+    if (!canViewAll && myMemberId) {
+      query += ` AND (c.member_id = ? OR c.member_id IS NULL OR c.is_default = 1)`;
+      params.push(myMemberId);
+    }
+
+    query += ` ORDER BY c.is_default DESC, c.name ASC`;
+
+    const calendars = db.prepare(query).all(...params);
     res.json(calendars);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -634,6 +812,10 @@ router.get('/calendars', authenticateToken, (req: AuthRequest, res: Response) =>
 
 router.post('/calendars', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'calendar_create')) {
+      return res.status(403).json({ error: 'You do not have permission to create calendars.' });
+    }
+
     const { name, color, description, member_id } = req.body;
     if (!name || (typeof name === 'string' && !name.trim())) {
       return res.status(400).json({ error: 'Calendar name is required.' });
@@ -641,6 +823,10 @@ router.post('/calendars', authenticateToken, (req: AuthRequest, res: Response) =
 
     let targetMemberId: string | null = null;
     if (member_id !== undefined && member_id !== null && member_id !== '' && member_id !== 'null' && member_id !== 'unassigned') {
+      if (!hasPermission(req.user, 'calendar_assign')) {
+        return res.status(403).json({ error: 'You do not have permission to assign calendars to family members.' });
+      }
+
       const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ? AND is_active = 1').get(
         member_id,
         req.user!.family_id
@@ -677,6 +863,10 @@ router.post('/calendars', authenticateToken, (req: AuthRequest, res: Response) =
 
 router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'calendar_edit')) {
+      return res.status(403).json({ error: 'You do not have permission to edit calendars.' });
+    }
+
     const { id } = req.params;
     const { name, color, description, sync_enabled, is_read_only, member_id } = req.body;
     const now = new Date().toISOString();
@@ -694,6 +884,10 @@ router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response
     let targetMemberId: string | null = null;
 
     if (member_id !== undefined) {
+      if (!hasPermission(req.user, 'calendar_assign')) {
+        return res.status(403).json({ error: 'You do not have permission to assign calendars to family members.' });
+      }
+
       isUpdatingMember = true;
       if (member_id && member_id !== 'null' && member_id !== 'unassigned') {
         const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ? AND is_active = 1').get(
@@ -769,6 +963,10 @@ router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response
 
 router.delete('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'calendar_delete')) {
+      return res.status(403).json({ error: 'You do not have permission to delete calendars.' });
+    }
+
     const { id } = req.params;
     const cal = db.prepare('SELECT * FROM calendars WHERE id = ? AND family_id = ?').get(
       id,
@@ -793,6 +991,10 @@ router.delete('/calendars/:id', authenticateToken, (req: AuthRequest, res: Respo
 
 router.get('/events', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'event_view')) {
+      return res.status(403).json({ error: 'You do not have permission to view calendar events.' });
+    }
+
     const { start, end, member_id, calendar_id } = req.query as {
       start?: string;
       end?: string;
@@ -844,6 +1046,10 @@ router.get('/events', authenticateToken, (req: AuthRequest, res: Response) => {
 
 router.post('/events', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'event_create')) {
+      return res.status(403).json({ error: 'You do not have permission to create calendar events.' });
+    }
+
     const {
       calendar_id,
       title,
@@ -971,6 +1177,10 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
       return res.status(404).json({ error: 'Event not found.' });
     }
 
+    if (!canUserEditEvent(req.user!, existing)) {
+      return res.status(403).json({ error: 'You do not have permission to edit this event.' });
+    }
+
     const prevGoogleCalendarId = existing.google_calendar_id;
     const prevGoogleEventId = existing.google_event_id;
 
@@ -1053,6 +1263,10 @@ router.delete('/events/:id', authenticateToken, (req: AuthRequest, res: Response
 
     if (!existing) {
       return res.status(404).json({ error: 'Event not found.' });
+    }
+
+    if (!canUserDeleteEvent(req.user!, existing)) {
+      return res.status(403).json({ error: 'You do not have permission to delete this event.' });
     }
 
     // If linked to Google, record tombstone in pending_google_deletions to prevent accidental resurrection
@@ -1268,6 +1482,10 @@ router.get('/calendar/google/config', authenticateToken, (req: AuthRequest, res:
 
 router.get(['/calendar/google/auth-url', '/calendar/google/auth'], authenticateToken, (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'google_calendar_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to manage Google Calendar integrations.' });
+    }
+
     const { url, state } = generateAuthUrl(req.user!.id, req.user!.family_id);
     
     // If request accepts json
@@ -1315,6 +1533,10 @@ router.get('/calendar/google/accounts', authenticateToken, (req: AuthRequest, re
 
 router.post('/calendar/google/discover', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'google_calendar_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to manage Google Calendar integrations.' });
+    }
+
     const { account_id } = req.body;
     const account = db.prepare('SELECT id FROM google_accounts WHERE family_id = ? AND (id = ? OR ? IS NULL) LIMIT 1').get(
       req.user!.family_id,
@@ -1335,6 +1557,10 @@ router.post('/calendar/google/discover', authenticateToken, async (req: AuthRequ
 
 router.post('/calendar/google/sync', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'google_calendar_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to manage Google Calendar integrations.' });
+    }
+
     const { account_id } = req.body;
     const account = db.prepare('SELECT id FROM google_accounts WHERE family_id = ? AND (id = ? OR ? IS NULL) LIMIT 1').get(
       req.user!.family_id,
@@ -1355,6 +1581,10 @@ router.post('/calendar/google/sync', authenticateToken, async (req: AuthRequest,
 
 router.post('/calendar/google/disconnect', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
+    if (!hasPermission(req.user, 'google_calendar_manage')) {
+      return res.status(403).json({ error: 'You do not have permission to manage Google Calendar integrations.' });
+    }
+
     const { account_id } = req.body;
     const result = disconnectGoogle(req.user!.family_id, account_id);
     res.json(result);

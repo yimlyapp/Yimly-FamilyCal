@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
 import { useFamily } from '../../context/FamilyContext';
 import { useAuth } from '../../context/AuthContext';
-import { FamilyMember, UserRole } from '../../types';
+import {
+  FamilyMember,
+  UserRole,
+  PermissionKey,
+  UserPermissions,
+  PERMISSION_DEFINITIONS,
+  DEFAULT_MEMBER_PERMISSIONS,
+  ADMIN_PERMISSIONS,
+} from '../../types';
 import {
   Users,
   Plus,
@@ -22,6 +30,8 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Sliders,
+  RotateCcw,
 } from 'lucide-react';
 
 const PRESET_MEMBER_COLORS = [
@@ -36,8 +46,17 @@ const PRESET_MEMBER_COLORS = [
 ];
 
 export const FamilyView: React.FC = () => {
-  const { family, members, addMember, updateMember, removeMember, manageMemberLogin, updateHousehold } = useFamily();
-  const { user } = useAuth();
+  const {
+    family,
+    members,
+    addMember,
+    updateMember,
+    removeMember,
+    manageMemberLogin,
+    updateHousehold,
+    updateMemberPermissions,
+  } = useFamily();
+  const { user, hasPermission } = useAuth();
 
   // Household settings edit state
   const [isEditingHousehold, setIsEditingHousehold] = useState(false);
@@ -67,7 +86,15 @@ export const FamilyView: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginSuccess, setLoginSuccess] = useState<string | null>(null);
 
+  // Permissions Modal State (Admin only)
+  const [permModalMember, setPermModalMember] = useState<FamilyMember | null>(null);
+  const [memberPermissions, setMemberPermissions] = useState<UserPermissions>({ ...DEFAULT_MEMBER_PERMISSIONS });
+  const [permSubmitting, setPermSubmitting] = useState(false);
+  const [permError, setPermError] = useState<string | null>(null);
+  const [permSuccess, setPermSuccess] = useState<string | null>(null);
+
   const isAdmin = user?.role === 'administrator';
+  const canManageMembers = isAdmin || hasPermission('members_manage');
 
   const openAddModal = () => {
     setEditingMember(null);
@@ -102,6 +129,68 @@ export const FamilyView: React.FC = () => {
     setShowLoginPassword(false);
     setLoginError(null);
     setLoginSuccess(null);
+  };
+
+  const openPermissionsModal = (m: FamilyMember) => {
+    setPermModalMember(m);
+    const base = m.role === 'administrator' ? ADMIN_PERMISSIONS : DEFAULT_MEMBER_PERMISSIONS;
+    const resolved = m.resolved_permissions || base;
+    setMemberPermissions({ ...resolved });
+    setPermError(null);
+    setPermSuccess(null);
+  };
+
+  const handleTogglePermission = (key: PermissionKey) => {
+    setMemberPermissions((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const handleResetPermissions = (preset: 'admin' | 'adult' | 'child') => {
+    if (preset === 'admin') {
+      setMemberPermissions({ ...ADMIN_PERMISSIONS });
+    } else if (preset === 'child') {
+      setMemberPermissions({
+        ...DEFAULT_MEMBER_PERMISSIONS,
+        calendar_create: false,
+        calendar_edit: false,
+        calendar_delete: false,
+        calendar_assign: false,
+        event_create: true,
+        event_edit_all: false,
+        event_edit_assigned: true,
+        event_edit_own: true,
+        event_delete_all: false,
+        event_delete_assigned: false,
+        event_delete_own: true,
+        members_manage: false,
+        google_calendar_manage: false,
+      });
+    } else {
+      setMemberPermissions({ ...DEFAULT_MEMBER_PERMISSIONS });
+    }
+  };
+
+  const handlePermissionsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!permModalMember) return;
+    setPermSubmitting(true);
+    setPermError(null);
+    setPermSuccess(null);
+    try {
+      await updateMemberPermissions(permModalMember.id, {
+        permissions: memberPermissions,
+      });
+      setPermSuccess('Permissions updated successfully.');
+      setTimeout(() => {
+        setPermModalMember(null);
+      }, 1200);
+    } catch (err: any) {
+      setPermError(err?.message || 'Failed to update permissions.');
+    } finally {
+      setPermSubmitting(false);
+    }
   };
 
   const handleSaveHousehold = async (e: React.FormEvent) => {
@@ -236,49 +325,53 @@ export const FamilyView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {isEditingHousehold ? (
-            <form onSubmit={handleSaveHousehold} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={householdName}
-                onChange={(e) => setHouseholdName(e.target.value)}
-                className="bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
-              />
+          {canManageMembers && (
+            isEditingHousehold ? (
+              <form onSubmit={handleSaveHousehold} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={householdName}
+                  onChange={(e) => setHouseholdName(e.target.value)}
+                  className="bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                />
+                <button
+                  type="submit"
+                  className="p-2 rounded-xl bg-[#FF4FA3] text-white hover:bg-[#e63e90] cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingHousehold(false)}
+                  className="p-2 rounded-xl bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </form>
+            ) : (
               <button
-                type="submit"
-                className="p-2 rounded-xl bg-[#FF4FA3] text-white hover:bg-[#e63e90] cursor-pointer"
+                onClick={() => {
+                  setHouseholdName(family?.name || '');
+                  setHouseholdTimezone(family?.timezone || 'UTC');
+                  setIsEditingHousehold(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold border border-[#242C3D] transition-colors cursor-pointer"
               >
-                <Check className="w-4 h-4" />
+                Edit Household
               </button>
-              <button
-                type="button"
-                onClick={() => setIsEditingHousehold(false)}
-                className="p-2 rounded-xl bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </form>
-          ) : (
-            <button
-              onClick={() => {
-                setHouseholdName(family?.name || '');
-                setHouseholdTimezone(family?.timezone || 'UTC');
-                setIsEditingHousehold(true);
-              }}
-              className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold border border-[#242C3D] transition-colors cursor-pointer"
-            >
-              Edit Household
-            </button>
+            )
           )}
 
-          <button
-            id="add-family-member-btn"
-            onClick={openAddModal}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-md shadow-[#FF4FA3]/25 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Member</span>
-          </button>
+          {canManageMembers && (
+            <button
+              id="add-family-member-btn"
+              onClick={openAddModal}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-md shadow-[#FF4FA3]/25 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Member</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -286,6 +379,7 @@ export const FamilyView: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {members.map((member) => {
           const isCurrentUser = member.user_id === user?.id;
+          const canEditThisMember = isAdmin || isCurrentUser || canManageMembers;
 
           return (
             <div
@@ -324,6 +418,16 @@ export const FamilyView: React.FC = () => {
                 <div className="flex items-center gap-1">
                   {isAdmin && (
                     <button
+                      onClick={() => openPermissionsModal(member)}
+                      className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-cyan-400 transition-colors cursor-pointer"
+                      title="Manage Permissions"
+                      id={`manage-perms-btn-${member.id}`}
+                    >
+                      <Sliders className="w-4 h-4" />
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
                       onClick={() => openLoginModal(member)}
                       className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-[#FF4FA3] transition-colors cursor-pointer"
                       title="Manage Member Login"
@@ -332,13 +436,15 @@ export const FamilyView: React.FC = () => {
                       <Key className="w-4 h-4" />
                     </button>
                   )}
-                  <button
-                    onClick={() => openEditModal(member)}
-                    className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white transition-colors cursor-pointer"
-                    title="Edit Member"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                  {canEditThisMember && (
+                    <button
+                      onClick={() => openEditModal(member)}
+                      className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white transition-colors cursor-pointer"
+                      title="Edit Member"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
                   {members.length > 1 && !isCurrentUser && isAdmin && (
                     <button
                       onClick={() => handleDeleteMember(member.id, member.name)}
@@ -566,6 +672,147 @@ export const FamilyView: React.FC = () => {
         </div>
       )}
 
+      {/* Admin Manage Permissions Modal */}
+      {permModalMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-[#121620] border border-[#242C3D] rounded-3xl w-full max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in-95 my-8">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#242C3D]">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow"
+                  style={{ backgroundColor: permModalMember.color || '#FF4FA3' }}
+                >
+                  {permModalMember.name.slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-cyan-400" />
+                    Member Permissions
+                  </h3>
+                  <p className="text-[11px] text-gray-400">
+                    {permModalMember.name} • <span className="capitalize">{permModalMember.role}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPermModalMember(null)}
+                className="p-1 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {permError && (
+              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{permError}</span>
+              </div>
+            )}
+
+            {permSuccess && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{permSuccess}</span>
+              </div>
+            )}
+
+            {/* Role Presets */}
+            <div className="mb-4 p-3 rounded-2xl bg-[#0E111A] border border-[#242C3D]/80 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-gray-400 font-medium">Quick Presets:</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleResetPermissions('adult')}
+                  className="px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] text-[11px] font-semibold text-emerald-400 border border-emerald-500/20 transition-colors cursor-pointer"
+                >
+                  Adult Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleResetPermissions('child')}
+                  className="px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] text-[11px] font-semibold text-cyan-400 border border-cyan-500/20 transition-colors cursor-pointer"
+                >
+                  Child Defaults
+                </button>
+                {permModalMember.role === 'administrator' && (
+                  <button
+                    type="button"
+                    onClick={() => handleResetPermissions('admin')}
+                    className="px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] text-[11px] font-semibold text-[#FF4FA3] border border-[#FF4FA3]/20 transition-colors cursor-pointer"
+                  >
+                    Full Admin
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handlePermissionsSubmit} className="space-y-4">
+              {/* Categorized Permissions */}
+              {(['calendars', 'events', 'family', 'google'] as const).map((cat) => {
+                const catDefs = PERMISSION_DEFINITIONS.filter((d) => d.category === cat);
+                const catTitles: Record<string, string> = {
+                  calendars: 'Calendar Management',
+                  events: 'Events & Schedule',
+                  family: 'Family & Household',
+                  google: 'Google Calendar Integrations',
+                };
+
+                return (
+                  <div key={cat} className="space-y-2">
+                    <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                      {catTitles[cat]}
+                    </h4>
+                    <div className="space-y-1.5 bg-[#0E111A] p-3 rounded-2xl border border-[#242C3D]/60">
+                      {catDefs.map((def) => {
+                        const isChecked = Boolean(memberPermissions[def.key]);
+                        return (
+                          <label
+                            key={def.key}
+                            className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-[#1A202C]/60 cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleTogglePermission(def.key)}
+                              className="mt-0.5 w-4 h-4 rounded text-[#FF4FA3] focus:ring-[#FF4FA3] bg-[#121620] border-[#242C3D] cursor-pointer"
+                            />
+                            <div className="flex-1">
+                              <span className="text-xs font-semibold text-white block">
+                                {def.label}
+                              </span>
+                              <span className="text-[11px] text-gray-400 block leading-tight">
+                                {def.description}
+                              </span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#242C3D]">
+                <button
+                  type="button"
+                  onClick={() => setPermModalMember(null)}
+                  className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={permSubmitting}
+                  className="px-5 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold shadow-md shadow-[#FF4FA3]/25 cursor-pointer disabled:opacity-50"
+                >
+                  {permSubmitting ? 'Saving...' : 'Save Permissions'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Admin Manage Login Modal */}
       {loginModalMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
@@ -589,7 +836,7 @@ export const FamilyView: React.FC = () => {
               </div>
               <button
                 onClick={() => setLoginModalMember(null)}
-                className="p-1 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white"
+                className="p-1 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -704,7 +951,7 @@ export const FamilyView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setLoginModalMember(null)}
-                  className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold"
+                  className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>

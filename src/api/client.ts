@@ -125,6 +125,12 @@ export const api = {
       method: 'DELETE',
     }),
 
+  updateMemberPermissions: (id: string, data: { permissions?: Partial<import('../types').UserPermissions>; resetToDefaults?: boolean }) =>
+    fetchJson<FamilyMember>(`/api/family/members/${id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   // Calendars
   getCalendars: () => fetchJson<Calendar[]>('/api/calendars'),
 

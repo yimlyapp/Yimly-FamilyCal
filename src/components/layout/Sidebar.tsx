@@ -3,6 +3,7 @@ import { MiniCalendar } from '../calendar/MiniCalendar';
 import { EditCalendarModal } from '../calendar/EditCalendarModal';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
+import { useAuth } from '../../context/AuthContext';
 import { Calendar } from '../../types';
 import {
   Calendar as CalIcon,
@@ -23,6 +24,11 @@ export const Sidebar: React.FC = () => {
   } = useCalendar();
 
   const { members, selectedMemberFilter, setSelectedMemberFilter } = useFamily();
+  const { hasPermission, isAdmin } = useAuth();
+
+  const canCreateCalendar = isAdmin || hasPermission('calendar_create');
+  const canEditCalendar = isAdmin || hasPermission('calendar_edit');
+  const canAssignCalendar = isAdmin || hasPermission('calendar_assign');
 
   // Collapsible section states persisted across page refresh and re-login
   const [isCalendarsCollapsed, setIsCalendarsCollapsed] = useState<boolean>(() => {
@@ -75,7 +81,7 @@ export const Sidebar: React.FC = () => {
     await createCalendar({
       name: newCalName.trim(),
       color: newCalColor,
-      member_id: newCalMemberId || null,
+      member_id: canAssignCalendar ? (newCalMemberId || null) : null,
     });
     setNewCalName('');
     setNewCalMemberId('');
@@ -102,24 +108,26 @@ export const Sidebar: React.FC = () => {
             <CalIcon className="w-3.5 h-3.5 text-[#FF4FA3]" /> Household Calendars
           </span>
           <div className="flex items-center gap-1">
-            <button
-              id="add-calendar-toggle-btn"
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isCalendarsCollapsed) {
-                  setIsCalendarsCollapsed(false);
-                  try {
-                    localStorage.setItem('householdCalendarsCollapsed', 'false');
-                  } catch {}
-                }
-                setIsAddingCal(!isAddingCal);
-              }}
-              className="p-1 rounded-lg hover:bg-[#1A202C] text-gray-400 hover:text-white transition-colors cursor-pointer"
-              title="Create Calendar"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            {canCreateCalendar && (
+              <button
+                id="add-calendar-toggle-btn"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isCalendarsCollapsed) {
+                    setIsCalendarsCollapsed(false);
+                    try {
+                      localStorage.setItem('householdCalendarsCollapsed', 'false');
+                    } catch {}
+                  }
+                  setIsAddingCal(!isAddingCal);
+                }}
+                className="p-1 rounded-lg hover:bg-[#1A202C] text-gray-400 hover:text-white transition-colors cursor-pointer"
+                title="Create Calendar"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            )}
             <span
               className="p-1 text-gray-400 group-hover:text-white transition-transform duration-200 flex items-center justify-center"
               style={{
@@ -136,7 +144,7 @@ export const Sidebar: React.FC = () => {
         {!isCalendarsCollapsed && (
           <div className="space-y-3">
             {/* Add Calendar inline form with Name, Color, and Assigned Member */}
-            {isAddingCal && (
+            {canCreateCalendar && isAddingCal && (
               <form onSubmit={handleCreateCalendar} className="space-y-2.5 pt-1 pb-2 border-b border-[#242C3D]/60">
                 <div>
                   <label htmlFor="create-cal-name" className="text-[10px] text-gray-400 font-semibold block mb-1">
@@ -153,24 +161,26 @@ export const Sidebar: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="create-cal-member" className="text-[10px] text-gray-400 font-semibold block mb-1">
-                    Assigned Member
-                  </label>
-                  <select
-                    id="create-cal-member"
-                    value={newCalMemberId}
-                    onChange={(e) => setNewCalMemberId(e.target.value)}
-                    className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3] cursor-pointer"
-                  >
-                    <option value="">Shared Household</option>
-                    {activeMembers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {canAssignCalendar && (
+                  <div>
+                    <label htmlFor="create-cal-member" className="text-[10px] text-gray-400 font-semibold block mb-1">
+                      Assigned Member
+                    </label>
+                    <select
+                      id="create-cal-member"
+                      value={newCalMemberId}
+                      onChange={(e) => setNewCalMemberId(e.target.value)}
+                      className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3] cursor-pointer"
+                    >
+                      <option value="">Shared Household</option>
+                      {activeMembers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-[10px] text-gray-400 font-semibold block mb-1">
@@ -254,18 +264,20 @@ export const Sidebar: React.FC = () => {
                       {isGoogle && (
                         <Globe className="w-3 h-3 text-blue-400 shrink-0" title="Google Synced" />
                       )}
-                      <button
-                        id={`edit-cal-${cal.id}`}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingCal(cal);
-                        }}
-                        className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-[#242C3D] transition-colors opacity-80 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
-                        title={`Edit ${cal.name}`}
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                      {canEditCalendar && (
+                        <button
+                          id={`edit-cal-${cal.id}`}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCal(cal);
+                          }}
+                          className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-[#242C3D] transition-colors opacity-80 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                          title={`Edit ${cal.name}`}
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
