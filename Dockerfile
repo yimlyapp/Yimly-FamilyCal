@@ -8,10 +8,10 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy dependency manifests
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 
-# Install all dependencies
-RUN npm ci || npm install
+# Install all dependencies deterministically using lockfile
+RUN npm ci
 
 # Copy source files
 COPY . .
