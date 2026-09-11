@@ -18,8 +18,11 @@ import {
   Calendar as CalIcon,
   UserCheck,
   Users,
+  Pencil,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { EditCalendarModal } from '../calendar/EditCalendarModal';
+import { Calendar } from '../../types';
 
 export const IntegrationsView: React.FC = () => {
   const { calendars, updateCalendar, fetchCalendarData } = useCalendar();
@@ -31,6 +34,7 @@ export const IntegrationsView: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [updatingCalId, setUpdatingCalId] = useState<string | null>(null);
+  const [editingCalendar, setEditingCalendar] = useState<Calendar | null>(null);
 
   const loadAll = async () => {
     setIsLoading(true);
@@ -311,23 +315,36 @@ export const IntegrationsView: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 w-full sm:w-auto justify-between sm:justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-[#242C3D]/60">
-                      <label htmlFor={`assign-cal-${cal.id}`} className="text-[11px] text-gray-400 font-medium whitespace-nowrap">
-                        Assigned Member:
-                      </label>
-                      <select
-                        id={`assign-cal-${cal.id}`}
-                        value={cal.member_id || ''}
-                        disabled={isSaving}
-                        onChange={(e) => handleAssignCalendar(cal.id, e.target.value || null)}
-                        className="bg-[#121620] border border-[#242C3D] text-xs text-white rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#FF4FA3] cursor-pointer disabled:opacity-50 font-medium"
+                      <button
+                        id={`edit-google-cal-${cal.id}`}
+                        type="button"
+                        onClick={() => setEditingCalendar(cal)}
+                        className="px-2.5 py-1.5 rounded-xl bg-[#121620] hover:bg-[#1A202C] border border-[#242C3D] text-xs text-gray-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 font-medium"
+                        title="Edit friendly name and settings"
                       >
-                        <option value="">Shared Household</option>
-                        {members.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
-                          </option>
-                        ))}
-                      </select>
+                        <Pencil className="w-3.5 h-3.5 text-[#FF4FA3]" />
+                        <span>Edit</span>
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <label htmlFor={`assign-cal-${cal.id}`} className="text-[11px] text-gray-400 font-medium whitespace-nowrap">
+                          Assigned:
+                        </label>
+                        <select
+                          id={`assign-cal-${cal.id}`}
+                          value={cal.member_id || ''}
+                          disabled={updatingCalId === cal.id}
+                          onChange={(e) => handleAssignCalendar(cal.id, e.target.value || null)}
+                          className="bg-[#121620] border border-[#242C3D] text-xs text-white rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#FF4FA3] cursor-pointer disabled:opacity-50 font-medium"
+                        >
+                          <option value="">Shared Household</option>
+                          {members.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 );
@@ -407,6 +424,13 @@ export const IntegrationsView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Calendar Modal */}
+      <EditCalendarModal
+        calendar={editingCalendar}
+        isOpen={!!editingCalendar}
+        onClose={() => setEditingCalendar(null)}
+      />
     </div>
   );
 };

@@ -100,8 +100,14 @@ export const EventModal: React.FC = () => {
       if (defaultCal) {
         setCalendarId(defaultCal.id);
         setColor(defaultCal.color || '#FF4FA3');
+        if (defaultCal.member_id) {
+          setAssignedMemberIds([defaultCal.member_id]);
+        } else {
+          setAssignedMemberIds([]);
+        }
       } else {
         setColor('#FF4FA3');
+        setAssignedMemberIds([]);
       }
     }
     setError(null);
@@ -245,9 +251,15 @@ export const EventModal: React.FC = () => {
                 id="event-calendar-select"
                 value={calendarId}
                 onChange={(e) => {
-                  setCalendarId(e.target.value);
-                  const selectedCal = calendars.find((c) => c.id === e.target.value);
-                  if (selectedCal) setColor(selectedCal.color);
+                  const newCalId = e.target.value;
+                  setCalendarId(newCalId);
+                  const selectedCal = calendars.find((c) => c.id === newCalId);
+                  if (selectedCal) {
+                    setColor(selectedCal.color);
+                    if (!selectedEvent && selectedCal.member_id) {
+                      setAssignedMemberIds([selectedCal.member_id]);
+                    }
+                  }
                 }}
                 className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
               >

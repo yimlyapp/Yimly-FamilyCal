@@ -295,7 +295,7 @@ export async function discoverGoogleCalendars(familyId: string, accountId: strin
 
   const updateCal = db.prepare(`
     UPDATE calendars
-    SET name = ?, color = ?, description = ?, is_read_only = ?, updated_at = ?
+    SET is_read_only = ?, updated_at = ?
     WHERE family_id = ? AND google_calendar_id = ?
   `);
 
@@ -309,7 +309,7 @@ export async function discoverGoogleCalendars(familyId: string, accountId: strin
     const color = item.backgroundColor || '#4285F4';
 
     if (existing) {
-      updateCal.run(item.summary, color, item.description || null, isReadOnly, now, familyId, item.id);
+      updateCal.run(isReadOnly, now, familyId, item.id);
     } else {
       const calId = 'gcal_' + uuidv4().slice(0, 8);
       insertCal.run(

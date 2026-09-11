@@ -151,50 +151,61 @@ if not exist "backups" (
 set "BACKUP_FILE=backups\family-calendar-!TIMESTAMP!.db"
 set "DB_FOUND=0"
 
-:: 1. Attempt backup from existing Docker container (familycal or yimly-familycal)
-echo Inspecting Docker container for SQLite database...
+:: Dynamically determine active container name (defaults to yimly-familycal)
+set "CONTAINER_NAME=yimly-familycal"
+for /f "delims=" %%c in ('docker compose -f docker-compose.yml ps -a --format "{{.Name}}" 2^>nul') do (
+    if not "%%c"=="" set "CONTAINER_NAME=%%c"
+)
 
-:: Check primary container 'familycal'
-docker ps -a --format "{{.Names}}" 2^>nul | findstr /x /c:"familycal" >nul
+:: 1. Attempt backup from active Docker container (!CONTAINER_NAME!)
+echo Inspecting Docker container '!CONTAINER_NAME!' for SQLite database...
+
+docker inspect !CONTAINER_NAME! >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     :: Try standard SQLite locations inside the container
-    docker cp familycal:/app/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+    docker cp !CONTAINER_NAME!:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
     if %ERRORLEVEL% equ 0 (
         set "DB_FOUND=1"
-        docker cp familycal:/app/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
-        docker cp familycal:/app/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
+        docker cp !CONTAINER_NAME!:/data/yimly_familycal.db-wal "!BACKUP_FILE!-wal" >nul 2>&1
+        docker cp !CONTAINER_NAME!:/data/yimly_familycal.db-shm "!BACKUP_FILE!-shm" >nul 2>&1
     ) else (
-        docker cp familycal:/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+        docker cp !CONTAINER_NAME!:/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
         if %ERRORLEVEL% equ 0 (
             set "DB_FOUND=1"
-            docker cp familycal:/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
-            docker cp familycal:/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
+            docker cp !CONTAINER_NAME!:/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
+            docker cp !CONTAINER_NAME!:/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
         ) else (
-            docker cp familycal:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
+            docker cp !CONTAINER_NAME!:/app/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
             if %ERRORLEVEL% equ 0 (
                 set "DB_FOUND=1"
-                docker cp familycal:/data/yimly_familycal.db-wal "!BACKUP_FILE!-wal" >nul 2>&1
-                docker cp familycal:/data/yimly_familycal.db-shm "!BACKUP_FILE!-shm" >nul 2>&1
+                docker cp !CONTAINER_NAME!:/app/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
+                docker cp !CONTAINER_NAME!:/app/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
             )
         )
     )
 )
 
-:: Fallback check container 'yimly-familycal' if 'familycal' was not found
+:: Fallback check legacy container 'familycal' if database was not found in !CONTAINER_NAME!
 if !DB_FOUND! equ 0 (
-    docker ps -a --format "{{.Names}}" 2^>nul | findstr /x /c:"yimly-familycal" >nul
+    docker inspect familycal >nul 2>&1
     if %ERRORLEVEL% equ 0 (
-        docker cp yimly-familycal:/app/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+        docker cp familycal:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
         if %ERRORLEVEL% equ 0 (
             set "DB_FOUND=1"
+            docker cp familycal:/data/yimly_familycal.db-wal "!BACKUP_FILE!-wal" >nul 2>&1
+            docker cp familycal:/data/yimly_familycal.db-shm "!BACKUP_FILE!-shm" >nul 2>&1
         ) else (
-            docker cp yimly-familycal:/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+            docker cp familycal:/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
             if %ERRORLEVEL% equ 0 (
                 set "DB_FOUND=1"
+                docker cp familycal:/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
+                docker cp familycal:/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
             ) else (
-                docker cp yimly-familycal:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
+                docker cp familycal:/app/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
                 if %ERRORLEVEL% equ 0 (
                     set "DB_FOUND=1"
+                    docker cp familycal:/app/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
+                    docker cp familycal:/app/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
                 )
             )
         )
@@ -203,11 +214,11 @@ if !DB_FOUND! equ 0 (
 
 :: Fallback check host filesystem if mounted directly
 if !DB_FOUND! equ 0 (
-    if exist "data\family_calendar.sqlite" (
-        copy /y "data\family_calendar.sqlite" "!BACKUP_FILE!" >nul 2>&1
-        if %ERRORLEVEL% equ 0 set "DB_FOUND=1"
-    ) else if exist "data\yimly_familycal.db" (
+    if exist "data\yimly_familycal.db" (
         copy /y "data\yimly_familycal.db" "!BACKUP_FILE!" >nul 2>&1
+        if %ERRORLEVEL% equ 0 set "DB_FOUND=1"
+    ) else if exist "data\family_calendar.sqlite" (
+        copy /y "data\family_calendar.sqlite" "!BACKUP_FILE!" >nul 2>&1
         if %ERRORLEVEL% equ 0 set "DB_FOUND=1"
     )
 )
@@ -265,6 +276,11 @@ if %ERRORLEVEL% neq 0 (
     goto :fail
 )
 
+:: Refresh actual container name in case Compose assigned a new instance name
+for /f "delims=" %%c in ('docker compose -f docker-compose.yml ps --format "{{.Name}}" 2^>nul') do (
+    if not "%%c"=="" set "CONTAINER_NAME=%%c"
+)
+
 :: Clean up dangling/unused build images safely
 echo Pruning dangling images...
 docker image prune -f >nul 2>&1
@@ -276,32 +292,59 @@ echo.
 :: [5/5] Checking health
 :: -----------------------------------------------------------------------------
 echo [5/5] Checking health...
-echo Waiting for container 'familycal' to report healthy status (up to 60s)...
+echo Waiting for container '!CONTAINER_NAME!' to become healthy...
+echo.
 
 set "IS_HEALTHY=0"
+set "MAX_CHECKS=36"
+set "CHECK_INTERVAL=5"
 
-for /l %%i in (1,1,12) do (
+for /l %%i in (1,1,%MAX_CHECKS%) do (
     if !IS_HEALTHY! equ 0 (
-        set "CURRENT_STATUS=starting"
-        for /f "delims=" %%s in ('docker inspect --format="{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" familycal 2^>nul') do set "CURRENT_STATUS=%%s"
-        
-        echo   [Check %%i/12] Status: !CURRENT_STATUS!
+        set "CURRENT_STATUS="
+        set "IS_RUNNING="
+
+        :: Query Docker's State.Health.Status directly using Go template
+        for /f "delims=" %%s in ('docker inspect --format="{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}" !CONTAINER_NAME! 2^>nul') do (
+            set "CURRENT_STATUS=%%s"
+        )
+
+        if not defined CURRENT_STATUS set "CURRENT_STATUS=starting"
 
         if /i "!CURRENT_STATUS!"=="healthy" (
+            echo   [Check %%i/%MAX_CHECKS%] Status: healthy
             set "IS_HEALTHY=1"
         ) else if /i "!CURRENT_STATUS!"=="unhealthy" (
+            echo   [Check %%i/%MAX_CHECKS%] Status: unhealthy
             echo.
-            echo [ERROR] Container 'familycal' reported UNHEALTHY status.
+            echo [ERROR] Container '!CONTAINER_NAME!' reported UNHEALTHY status.
             goto :health_failed
+        ) else if /i "!CURRENT_STATUS!"=="none" (
+            :: Handle containers without Docker healthcheck configured (Requirement 5)
+            for /f "delims=" %%r in ('docker inspect --format="{{.State.Running}}" !CONTAINER_NAME! 2^>nul') do set "IS_RUNNING=%%r"
+            if /i "!IS_RUNNING!"=="true" (
+                docker exec !CONTAINER_NAME! wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health >nul 2>&1
+                if !ERRORLEVEL! equ 0 (
+                    echo   [Check %%i/%MAX_CHECKS%] Status: healthy
+                    set "IS_HEALTHY=1"
+                ) else (
+                    echo   [Check %%i/%MAX_CHECKS%] Status: starting
+                    timeout /t %CHECK_INTERVAL% /nobreak >nul
+                )
+            ) else (
+                echo   [Check %%i/%MAX_CHECKS%] Status: starting
+                timeout /t %CHECK_INTERVAL% /nobreak >nul
+            )
         ) else (
-            timeout /t 5 /nobreak >nul
+            echo   [Check %%i/%MAX_CHECKS%] Status: !CURRENT_STATUS!
+            timeout /t %CHECK_INTERVAL% /nobreak >nul
         )
     )
 )
 
 if !IS_HEALTHY! neq 1 (
     echo.
-    echo [ERROR] Container 'familycal' did not become healthy within 60 seconds.
+    echo [ERROR] Container '!CONTAINER_NAME!' did not become healthy within 180 seconds.
     goto :health_failed
 )
 
@@ -310,11 +353,11 @@ if !IS_HEALTHY! neq 1 (
 :: -----------------------------------------------------------------------------
 echo.
 echo ========================================
-echo Yimly FamilyCal health check: HEALTHY
+echo       YIMLY FAMILYCAL UPDATE
+echo              SUCCESS
 echo ========================================
-echo ========================================
-echo Yimly FamilyCal update complete.
-echo ========================================
+echo.
+echo FamilyCal container is healthy and running.
 echo.
 
 echo Running container status:
@@ -322,9 +365,9 @@ docker compose -f docker-compose.yml ps
 echo.
 
 echo Yimly FamilyCal Networking Summary:
-echo Docker Container:           familycal
+echo Docker Container:           !CONTAINER_NAME!
 echo Docker Network:             cloudflared_bridge
-echo Network Alias:              familycal
+echo Network Alias:              familycal, yimly-familycal
 echo Internal Port:              3000
 echo Host Port:                  Not published
 echo Cloudflare Tunnel Target:   http://familycal:3000

@@ -128,7 +128,7 @@ export const api = {
   // Calendars
   getCalendars: () => fetchJson<Calendar[]>('/api/calendars'),
 
-  createCalendar: (data: { name: string; color?: string; description?: string }) =>
+  createCalendar: (data: { name: string; color?: string; description?: string; member_id?: string | null }) =>
     fetchJson<Calendar>('/api/calendars', {
       method: 'POST',
       body: JSON.stringify(data),

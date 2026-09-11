@@ -28,7 +28,7 @@ interface CalendarContextType {
   createEvent: (data: Partial<CalendarEvent>) => Promise<CalendarEvent>;
   updateEvent: (id: string, data: Partial<CalendarEvent>) => Promise<CalendarEvent>;
   deleteEvent: (id: string) => Promise<void>;
-  createCalendar: (data: { name: string; color?: string; description?: string }) => Promise<Calendar>;
+  createCalendar: (data: { name: string; color?: string; description?: string; member_id?: string | null }) => Promise<Calendar>;
   updateCalendar: (id: string, data: Partial<Calendar>) => Promise<Calendar>;
   deleteCalendar: (id: string) => Promise<void>;
   triggerGoogleSync: () => Promise<{ success: boolean; eventsSynced: number }>;
@@ -150,7 +150,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await fetchCalendarData();
   };
 
-  const createCalendar = async (data: { name: string; color?: string; description?: string }) => {
+  const createCalendar = async (data: { name: string; color?: string; description?: string; member_id?: string | null }) => {
     const created = await api.createCalendar(data);
     await fetchCalendarData();
     setSelectedCalendarIds((prev) => [...prev, created.id]);

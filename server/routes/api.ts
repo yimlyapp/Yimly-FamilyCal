@@ -635,20 +635,20 @@ router.get('/calendars', authenticateToken, (req: AuthRequest, res: Response) =>
 router.post('/calendars', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const { name, color, description, member_id } = req.body;
-    if (!name) {
+    if (!name || (typeof name === 'string' && !name.trim())) {
       return res.status(400).json({ error: 'Calendar name is required.' });
     }
 
     let targetMemberId: string | null = null;
-    if (member_id && member_id !== 'null' && member_id !== 'unassigned') {
-      const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ?').get(
+    if (member_id !== undefined && member_id !== null && member_id !== '' && member_id !== 'null' && member_id !== 'unassigned') {
+      const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ? AND is_active = 1').get(
         member_id,
         req.user!.family_id
-      );
+      ) as { id: string } | undefined;
       if (!validMember) {
         return res.status(400).json({ error: 'Selected family member does not exist in this household.' });
       }
-      targetMemberId = member_id;
+      targetMemberId = validMember.id;
     }
 
     const calId = 'cal_' + uuidv4().slice(0, 8);
@@ -696,18 +696,20 @@ router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response
     if (member_id !== undefined) {
       isUpdatingMember = true;
       if (member_id && member_id !== 'null' && member_id !== 'unassigned') {
-        const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ?').get(
+        const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ? AND is_active = 1').get(
           member_id,
           req.user!.family_id
-        );
+        ) as { id: string } | undefined;
         if (!validMember) {
           return res.status(400).json({ error: 'Selected family member does not belong to your household.' });
         }
-        targetMemberId = member_id;
+        targetMemberId = validMember.id;
       } else {
         targetMemberId = null;
       }
     }
+
+    const trimmedName = name !== undefined && typeof name === 'string' && name.trim() ? name.trim() : null;
 
     db.prepare(`
       UPDATE calendars
@@ -720,7 +722,7 @@ router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response
           updated_at = ?
       WHERE id = ? AND family_id = ?
     `).run(
-      name || null,
+      trimmedName,
       color || null,
       description !== undefined ? description : null,
       sync_enabled !== undefined ? (sync_enabled ? 1 : 0) : null,
@@ -878,9 +880,18 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
     ) as any;
 
     const eventColor = color || cal?.color || '#FF4FA3';
-    const memberIdsJson = JSON.stringify(assigned_member_ids || []);
+
+    // Automatically inherit member assignment from calendar if not explicitly provided
+    let finalMemberIds: string[] = [];
+    if (Array.isArray(assigned_member_ids) && assigned_member_ids.length > 0) {
+      finalMemberIds = assigned_member_ids;
+    } else if (cal?.member_id) {
+      finalMemberIds = [cal.member_id];
+    }
+
+    const memberIdsJson = JSON.stringify(finalMemberIds);
     const isGoogleCal = cal?.source === 'google';
-    const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, assigned_member_ids);
+    const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, finalMemberIds);
     const syncStatus = targetGoogle ? 'pending' : (isGoogleCal ? 'pending' : 'local_only');
 
     db.prepare(`
