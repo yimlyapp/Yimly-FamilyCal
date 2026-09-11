@@ -30,13 +30,15 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       family_id TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
+      email TEXT,
+      username TEXT,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
       role TEXT DEFAULT 'administrator',
       avatar_url TEXT,
       color TEXT DEFAULT '#FF4FA3',
       birthday TEXT,
+      is_active INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
@@ -157,6 +159,15 @@ export function initDatabase() {
       expires_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS pending_google_deletions (
+      id TEXT PRIMARY KEY,
+      family_id TEXT NOT NULL,
+      google_calendar_id TEXT NOT NULL,
+      google_event_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_events_family_start ON events(family_id, start_time);
     CREATE INDEX IF NOT EXISTS idx_events_calendar ON events(calendar_id);
     CREATE INDEX IF NOT EXISTS idx_events_google_id ON events(google_event_id);
@@ -176,9 +187,39 @@ export function initDatabase() {
     console.warn('Calendar member_id migration check warning:', migErr);
   }
 
-  // Create index on member_id after column exists
+  // Safe startup migration: Ensure username and is_active columns exist on users in existing databases
   try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_calendars_member ON calendars(member_id);`);
+    const userCols = db.prepare(`PRAGMA table_info(users);`).all() as Array<{ name: string }>;
+    const hasUsername = userCols.some((col) => col.name === 'username');
+    if (!hasUsername) {
+      db.prepare(`ALTER TABLE users ADD COLUMN username TEXT;`).run();
+      console.log('Migration applied: added username column to users table.');
+    }
+
+    const hasIsActive = userCols.some((col) => col.name === 'is_active');
+    if (!hasIsActive) {
+      db.prepare(`ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;`).run();
+      db.prepare(`UPDATE users SET is_active = 1 WHERE is_active IS NULL;`).run();
+      console.log('Migration applied: added is_active column to users table.');
+    }
+
+    // Backfill username for existing administrator if null
+    db.prepare(`
+      UPDATE users 
+      SET username = 'Alex' 
+      WHERE username IS NULL AND (email = 'admin@yimly.local' OR name LIKE '%Alex%');
+    `).run();
+  } catch (userMigErr) {
+    console.warn('User table migration check warning:', userMigErr);
+  }
+
+  // Create indexes after columns exist
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_calendars_member ON calendars(member_id);
+      CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+      CREATE INDEX IF NOT EXISTS idx_users_family_username ON users(family_id, username);
+    `);
   } catch (idxErr) {
     console.warn('Index creation warning:', idxErr);
   }
@@ -201,14 +242,15 @@ function seedInitialDataIfEmpty() {
     VALUES (?, ?, ?, ?, ?)
   `).run(familyId, 'The Yimly Family', 'America/New_York', now, now);
 
-  // 2. Create Admin User
+  // 2. Create Admin User with username 'Alex'
   db.prepare(`
-    INSERT INTO users (id, family_id, email, password_hash, name, role, avatar_url, color, birthday, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (id, family_id, email, username, password_hash, name, role, avatar_url, color, birthday, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).run(
     userId,
     familyId,
     'admin@yimly.local',
+    'Alex',
     defaultPasswordHash,
     'Alex Yimly',
     'administrator',

@@ -11,13 +11,14 @@ interface FamilyContextType {
   setSelectedMemberFilter: (id: string | null) => void;
   isLoading: boolean;
   fetchFamilyData: () => Promise<void>;
-  addMember: (data: Partial<FamilyMember>) => Promise<FamilyMember>;
+  addMember: (data: Partial<FamilyMember> & { login?: { enabled: boolean; username?: string; password?: string } }) => Promise<FamilyMember>;
   updateMember: (id: string, data: Partial<FamilyMember>) => Promise<FamilyMember>;
   removeMember: (id: string) => Promise<void>;
+  manageMemberLogin: (id: string, data: { enabled: boolean; username?: string; password?: string }) => Promise<any>;
   updateHousehold: (data: { name?: string; timezone?: string }) => Promise<void>;
 }
 
-const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
+export const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
 
 export function FamilyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -55,7 +56,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     fetchFamilyData();
   }, [fetchFamilyData]);
 
-  const addMember = async (data: Partial<FamilyMember>) => {
+  const addMember = async (data: Partial<FamilyMember> & { login?: { enabled: boolean; username?: string; password?: string } }) => {
     const newMember = await api.createMember(data);
     await fetchFamilyData();
     return newMember;
@@ -70,6 +71,12 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   const removeMember = async (id: string) => {
     await api.deleteMember(id);
     await fetchFamilyData();
+  };
+
+  const manageMemberLogin = async (id: string, data: { enabled: boolean; username?: string; password?: string }) => {
+    const res = await api.manageMemberLogin(id, data);
+    await fetchFamilyData();
+    return res;
   };
 
   const updateHousehold = async (data: { name?: string; timezone?: string }) => {
@@ -90,6 +97,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
         addMember,
         updateMember,
         removeMember,
+        manageMemberLogin,
         updateHousehold,
       }}
     >

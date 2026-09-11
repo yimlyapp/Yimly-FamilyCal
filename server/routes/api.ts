@@ -7,9 +7,35 @@ import {
   requireAdmin,
   optionalAuth,
   generateToken,
+  hashPassword,
+  verifyPassword,
   TOKEN_COOKIE_NAME,
   AuthRequest,
 } from '../auth.js';
+
+// Helper to generate a unique username within a household
+export function generateUniqueUsername(familyId: string, baseName: string, excludeUserId?: string): string {
+  let cleanName = baseName.trim().replace(/[^\w\s-]/g, '').trim();
+  if (!cleanName) {
+    cleanName = 'Member';
+  }
+
+  let candidate = cleanName;
+  let counter = 1;
+
+  while (true) {
+    const existing = db.prepare(`
+      SELECT id FROM users 
+      WHERE family_id = ? AND LOWER(username) = LOWER(?) ${excludeUserId ? 'AND id != ?' : ''}
+    `).get(...(excludeUserId ? [familyId, candidate, excludeUserId] : [familyId, candidate]));
+
+    if (!existing) {
+      return candidate;
+    }
+    counter++;
+    candidate = `${cleanName}${counter}`;
+  }
+}
 import {
   getGoogleConfig,
   generateAuthUrl,
@@ -17,6 +43,9 @@ import {
   discoverGoogleCalendars,
   syncTwoWay,
   disconnectGoogle,
+  triggerEventSync,
+  triggerGoogleDelete,
+  resolveGoogleCalendarForEvent,
 } from '../googleSync.js';
 
 export const router = express.Router();
@@ -54,8 +83,9 @@ router.post('/auth/register', (req: Request, res: Response) => {
     const userId = 'usr_' + uuidv4().slice(0, 8);
     const memberId = 'mem_' + uuidv4().slice(0, 8);
     const defaultCalId = 'cal_' + uuidv4().slice(0, 8);
-    const passwordHash = bcrypt.hashSync(password, 10);
+    const passwordHash = hashPassword(password);
     const userColor = color || '#FF4FA3';
+    const adminUsername = name.trim().split(' ')[0] || name.trim();
 
     // 1. Create Family
     db.prepare(`
@@ -65,9 +95,9 @@ router.post('/auth/register', (req: Request, res: Response) => {
 
     // 2. Create User
     db.prepare(`
-      INSERT INTO users (id, family_id, email, password_hash, name, role, color, birthday, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'administrator', ?, ?, ?, ?)
-    `).run(userId, familyId, email.toLowerCase().trim(), passwordHash, name.trim(), userColor, birthday || null, now, now);
+      INSERT INTO users (id, family_id, email, username, password_hash, name, role, color, birthday, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'administrator', ?, ?, 1, ?, ?)
+    `).run(userId, familyId, email.toLowerCase().trim(), adminUsername, passwordHash, name.trim(), userColor, birthday || null, now, now);
 
     // 3. Create Admin Family Member
     db.prepare(`
@@ -85,9 +115,11 @@ router.post('/auth/register', (req: Request, res: Response) => {
       id: userId,
       family_id: familyId,
       email: email.toLowerCase().trim(),
+      username: adminUsername,
       name: name.trim(),
       role: 'administrator' as const,
       color: userColor,
+      is_active: 1,
     };
 
     const token = generateToken(authUser);
@@ -110,24 +142,43 @@ router.post('/auth/register', (req: Request, res: Response) => {
 
 router.post('/auth/login', (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
+    const { email, username, loginIdentifier, password } = req.body;
+    const identifier = (loginIdentifier || username || email || '').trim();
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Username or email and password are required.' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim()) as any;
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    const cleanIdentifier = identifier.trim();
+    // Search candidates by email or username (case-insensitive)
+    const candidates = db.prepare(`
+      SELECT * FROM users 
+      WHERE (LOWER(email) = LOWER(?) OR (username IS NOT NULL AND LOWER(username) = LOWER(?)))
+    `).all(cleanIdentifier, cleanIdentifier) as any[];
+
+    if (!candidates.length) {
+      return res.status(401).json({ error: 'Invalid username/email or password.' });
+    }
+
+    // Match candidate by password hash using existing bcrypt verify
+    const user = candidates.find((u) => verifyPassword(password, u.password_hash));
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username/email or password.' });
+    }
+
+    if (user.is_active === 0) {
+      return res.status(403).json({ error: 'This login account has been disabled by the family administrator.' });
     }
 
     const authUser = {
       id: user.id,
       family_id: user.family_id,
       email: user.email,
+      username: user.username,
       name: user.name,
       role: user.role,
       avatar_url: user.avatar_url,
       color: user.color,
+      is_active: user.is_active,
     };
 
     const token = generateToken(authUser);
@@ -182,7 +233,12 @@ router.get('/family', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const family = db.prepare('SELECT * FROM families WHERE id = ?').get(req.user!.family_id);
     const members = db.prepare(`
-      SELECT m.*, u.email as user_email
+      SELECT 
+        m.*, 
+        u.email as user_email,
+        u.username as user_username,
+        u.is_active as user_is_active,
+        CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
       FROM family_members m
       LEFT JOIN users u ON m.user_id = u.id
       WHERE m.family_id = ? AND m.is_active = 1
@@ -190,6 +246,17 @@ router.get('/family', authenticateToken, (req: AuthRequest, res: Response) => {
     `).all(req.user!.family_id);
 
     res.json({ family, members });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/family/suggest-username', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const name = (req.query.name as string) || 'Member';
+    const excludeUserId = req.query.excludeUserId as string | undefined;
+    const username = generateUniqueUsername(req.user!.family_id, name, excludeUserId);
+    res.json({ username });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -214,29 +281,90 @@ router.put('/family', authenticateToken, requireAdmin, (req: AuthRequest, res: R
 
 router.post('/family/members', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
-    const { name, role, color, avatar_url, birthday } = req.body;
-    if (!name) {
+    const { name, role, color, avatar_url, birthday, login } = req.body;
+    if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Member name is required.' });
     }
 
-    const memberId = 'mem_' + uuidv4().slice(0, 8);
+    const memberRole = role || 'adult';
+    const memberColor = color || '#FF4FA3';
     const now = new Date().toISOString();
+    const memberId = 'mem_' + uuidv4().slice(0, 8);
+    let linkedUserId: string | null = null;
+
+    // Optional Member Login Account creation
+    if (login && login.enabled) {
+      if (req.user!.role !== 'administrator') {
+        return res.status(403).json({ error: 'Only administrators can create member login accounts.' });
+      }
+
+      if (!login.password || login.password.trim().length < 4) {
+        return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+      }
+
+      const desiredUsername = (login.username && login.username.trim())
+        ? login.username.trim()
+        : generateUniqueUsername(req.user!.family_id, name.trim());
+
+      const collision = db.prepare(
+        'SELECT id FROM users WHERE family_id = ? AND LOWER(username) = LOWER(?)'
+      ).get(req.user!.family_id, desiredUsername);
+
+      if (collision) {
+        return res.status(400).json({ error: `Username "${desiredUsername}" is already taken in this household.` });
+      }
+
+      const userId = 'usr_' + uuidv4().slice(0, 8);
+      const passwordHash = hashPassword(login.password);
+      const syntheticEmail = `${desiredUsername.toLowerCase().replace(/[^\w-]/g, '')}.${req.user!.family_id}@yimly.local`;
+
+      db.prepare(`
+        INSERT INTO users (id, family_id, email, username, password_hash, name, role, color, birthday, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `).run(
+        userId,
+        req.user!.family_id,
+        syntheticEmail,
+        desiredUsername,
+        passwordHash,
+        name.trim(),
+        memberRole,
+        memberColor,
+        birthday || null,
+        now,
+        now
+      );
+
+      linkedUserId = userId;
+    }
 
     db.prepare(`
       INSERT INTO family_members (id, family_id, user_id, name, role, color, avatar_url, birthday, is_active, created_at)
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 1, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
     `).run(
       memberId,
       req.user!.family_id,
+      linkedUserId,
       name.trim(),
-      role || 'adult',
-      color || '#FF4FA3',
+      memberRole,
+      memberColor,
       avatar_url || null,
       birthday || null,
       now
     );
 
-    const newMember = db.prepare('SELECT * FROM family_members WHERE id = ?').get(memberId);
+    const newMember = db.prepare(`
+      SELECT 
+        m.*, 
+        u.email as user_email,
+        u.username as user_username,
+        u.is_active as user_is_active,
+        CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
+      FROM family_members m
+      LEFT JOIN users u ON m.user_id = u.id
+      WHERE m.id = ?
+    `).get(memberId);
+
     res.status(201).json(newMember);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -251,20 +379,195 @@ router.put('/family/members/:id', authenticateToken, (req: AuthRequest, res: Res
     const existing = db.prepare('SELECT * FROM family_members WHERE id = ? AND family_id = ?').get(
       id,
       req.user!.family_id
-    );
+    ) as any;
     if (!existing) {
       return res.status(404).json({ error: 'Member not found.' });
     }
 
+    // Role changes require admin permission
+    if (role && role !== existing.role && req.user!.role !== 'administrator') {
+      return res.status(403).json({ error: 'Only administrators can change member roles.' });
+    }
+
+    const updatedName = name !== undefined ? name.trim() : existing.name;
+    const updatedRole = role || existing.role;
+    const updatedColor = color || existing.color;
+    const updatedAvatar = avatar_url !== undefined ? avatar_url : existing.avatar_url;
+    const updatedBirthday = birthday !== undefined ? birthday : existing.birthday;
+
     db.prepare(`
       UPDATE family_members
-      SET name = COALESCE(?, name), role = COALESCE(?, role), color = COALESCE(?, color),
-          avatar_url = COALESCE(?, avatar_url), birthday = COALESCE(?, birthday)
+      SET name = ?, role = ?, color = ?, avatar_url = ?, birthday = ?
       WHERE id = ? AND family_id = ?
-    `).run(name || null, role || null, color || null, avatar_url || null, birthday || null, id, req.user!.family_id);
+    `).run(updatedName, updatedRole, updatedColor, updatedAvatar, updatedBirthday, id, req.user!.family_id);
 
-    const updated = db.prepare('SELECT * FROM family_members WHERE id = ?').get(id);
+    // Keep linked user synchronized
+    if (existing.user_id) {
+      const now = new Date().toISOString();
+      db.prepare(`
+        UPDATE users
+        SET name = ?, role = ?, color = ?, birthday = ?, updated_at = ?
+        WHERE id = ? AND family_id = ?
+      `).run(updatedName, updatedRole, updatedColor, updatedBirthday, now, existing.user_id, req.user!.family_id);
+    }
+
+    const updated = db.prepare(`
+      SELECT 
+        m.*, 
+        u.email as user_email,
+        u.username as user_username,
+        u.is_active as user_is_active,
+        CASE WHEN u.id IS NOT NULL AND u.is_active = 1 THEN 1 ELSE 0 END as has_login
+      FROM family_members m
+      LEFT JOIN users u ON m.user_id = u.id
+      WHERE m.id = ?
+    `).get(id);
+
     res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only member login management (enable, disable, change username, reset password)
+router.post('/family/members/:id/login', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { enabled, username, password } = req.body;
+
+    const member = db.prepare('SELECT * FROM family_members WHERE id = ? AND family_id = ?').get(
+      id,
+      req.user!.family_id
+    ) as any;
+
+    if (!member) {
+      return res.status(404).json({ error: 'Family member not found.' });
+    }
+
+    const now = new Date().toISOString();
+
+    // CASE 1: Disable Login
+    if (enabled === false) {
+      if (member.user_id) {
+        if (member.user_id === req.user!.id) {
+          return res.status(400).json({ error: 'You cannot disable your own administrator login.' });
+        }
+        db.prepare('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ? AND family_id = ?').run(
+          now,
+          member.user_id,
+          req.user!.family_id
+        );
+      }
+      return res.json({
+        success: true,
+        message: `Login disabled for ${member.name}.`,
+        has_login: 0,
+        user_is_active: 0,
+        user_username: member.user_id ? (db.prepare('SELECT username FROM users WHERE id = ?').get(member.user_id) as any)?.username : null,
+      });
+    }
+
+    // CASE 2: Enable or Update Login
+    if (enabled === true) {
+      if (member.user_id) {
+        // Member already has an associated user account
+        const existingUser = db.prepare('SELECT * FROM users WHERE id = ? AND family_id = ?').get(
+          member.user_id,
+          req.user!.family_id
+        ) as any;
+
+        if (!existingUser) {
+          return res.status(404).json({ error: 'Linked user record not found.' });
+        }
+
+        let newUsername = existingUser.username;
+        if (username && username.trim()) {
+          const desired = username.trim();
+          const collision = db.prepare(
+            'SELECT id FROM users WHERE family_id = ? AND LOWER(username) = LOWER(?) AND id != ?'
+          ).get(req.user!.family_id, desired, existingUser.id);
+          if (collision) {
+            return res.status(400).json({ error: `Username "${desired}" is already taken in this household.` });
+          }
+          newUsername = desired;
+        }
+
+        let newPasswordHash = existingUser.password_hash;
+        if (password && password.trim()) {
+          if (password.trim().length < 4) {
+            return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+          }
+          newPasswordHash = hashPassword(password);
+        }
+
+        db.prepare(`
+          UPDATE users
+          SET username = ?, password_hash = ?, is_active = 1, updated_at = ?
+          WHERE id = ? AND family_id = ?
+        `).run(newUsername, newPasswordHash, now, existingUser.id, req.user!.family_id);
+
+        return res.json({
+          success: true,
+          message: `Login updated for ${member.name}.`,
+          has_login: 1,
+          user_is_active: 1,
+          user_username: newUsername,
+        });
+      } else {
+        // Create brand new user account for this family member
+        if (!password || password.trim().length < 4) {
+          return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+        }
+
+        const desiredUsername = (username && username.trim())
+          ? username.trim()
+          : generateUniqueUsername(req.user!.family_id, member.name);
+
+        const collision = db.prepare(
+          'SELECT id FROM users WHERE family_id = ? AND LOWER(username) = LOWER(?)'
+        ).get(req.user!.family_id, desiredUsername);
+        if (collision) {
+          return res.status(400).json({ error: `Username "${desiredUsername}" is already taken in this household.` });
+        }
+
+        const userId = 'usr_' + uuidv4().slice(0, 8);
+        const passwordHash = hashPassword(password);
+        const syntheticEmail = `${desiredUsername.toLowerCase().replace(/[^\w-]/g, '')}.${req.user!.family_id}@yimly.local`;
+
+        db.prepare(`
+          INSERT INTO users (id, family_id, email, username, password_hash, name, role, color, birthday, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        `).run(
+          userId,
+          req.user!.family_id,
+          syntheticEmail,
+          desiredUsername,
+          passwordHash,
+          member.name,
+          member.role,
+          member.color,
+          member.birthday || null,
+          now,
+          now
+        );
+
+        db.prepare('UPDATE family_members SET user_id = ? WHERE id = ? AND family_id = ?').run(
+          userId,
+          id,
+          req.user!.family_id
+        );
+
+        return res.json({
+          success: true,
+          message: `Login created for ${member.name}.`,
+          has_login: 1,
+          user_is_active: 1,
+          user_username: desiredUsername,
+        });
+      }
+    }
+
+    res.status(400).json({ error: 'Invalid login configuration request.' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -273,11 +576,34 @@ router.put('/family/members/:id', authenticateToken, (req: AuthRequest, res: Res
 router.delete('/family/members/:id', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const member = db.prepare('SELECT * FROM family_members WHERE id = ? AND family_id = ?').get(
+      id,
+      req.user!.family_id
+    ) as any;
+
+    if (!member) {
+      return res.status(404).json({ error: 'Member not found.' });
+    }
+
+    if (member.user_id === req.user!.id) {
+      return res.status(400).json({ error: 'You cannot remove your own administrator account.' });
+    }
+
+    // Deactivate member
     db.prepare('UPDATE family_members SET is_active = 0 WHERE id = ? AND family_id = ?').run(
       id,
       req.user!.family_id
     );
-    res.json({ success: true, message: 'Member deactivated.' });
+
+    // If member has a linked user, disable that login account
+    if (member.user_id) {
+      db.prepare('UPDATE users SET is_active = 0 WHERE id = ? AND family_id = ?').run(
+        member.user_id,
+        req.user!.family_id
+      );
+    }
+
+    res.json({ success: true, message: 'Member and linked login deactivated.' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -554,7 +880,8 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
     const eventColor = color || cal?.color || '#FF4FA3';
     const memberIdsJson = JSON.stringify(assigned_member_ids || []);
     const isGoogleCal = cal?.source === 'google';
-    const syncStatus = isGoogleCal ? 'pending' : 'local_only';
+    const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, assigned_member_ids);
+    const syncStatus = targetGoogle ? 'pending' : (isGoogleCal ? 'pending' : 'local_only');
 
     db.prepare(`
       INSERT INTO events (
@@ -595,6 +922,13 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
       all_day: Boolean(created.all_day),
       assigned_member_ids: JSON.parse(created.assigned_member_ids || '[]'),
     });
+
+    // Non-blocking Google Calendar synchronization
+    triggerEventSync({
+      eventId,
+      familyId: req.user!.family_id,
+      action: 'create',
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -626,10 +960,17 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
       return res.status(404).json({ error: 'Event not found.' });
     }
 
+    const prevGoogleCalendarId = existing.google_calendar_id;
+    const prevGoogleEventId = existing.google_event_id;
+
     const now = new Date().toISOString();
     const targetCalId = calendar_id || existing.calendar_id;
     const cal = db.prepare('SELECT * FROM calendars WHERE id = ?').get(targetCalId) as any;
-    const syncStatus = cal?.source === 'google' ? 'pending' : existing.sync_status;
+    const effectiveMembers = assigned_member_ids !== undefined
+      ? assigned_member_ids
+      : JSON.parse(existing.assigned_member_ids || '[]');
+    const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, effectiveMembers);
+    const syncStatus = targetGoogle ? 'pending' : (cal?.source === 'google' ? 'pending' : existing.sync_status);
 
     db.prepare(`
       UPDATE events
@@ -677,6 +1018,15 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
       all_day: Boolean(updated.all_day),
       assigned_member_ids: JSON.parse(updated.assigned_member_ids || '[]'),
     });
+
+    // Non-blocking Google Calendar synchronization
+    triggerEventSync({
+      eventId: id,
+      familyId: req.user!.family_id,
+      action: 'update',
+      previousGoogleCalendarId: prevGoogleCalendarId,
+      previousGoogleEventId: prevGoogleEventId,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -694,9 +1044,31 @@ router.delete('/events/:id', authenticateToken, (req: AuthRequest, res: Response
       return res.status(404).json({ error: 'Event not found.' });
     }
 
-    // If linked to Google, we can mark for remote deletion or remove immediately
+    // If linked to Google, record tombstone in pending_google_deletions to prevent accidental resurrection
+    if (existing.google_event_id && existing.google_calendar_id) {
+      db.prepare(`
+        INSERT OR REPLACE INTO pending_google_deletions (id, family_id, google_calendar_id, google_event_id, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        'del_' + uuidv4().slice(0, 8),
+        req.user!.family_id,
+        existing.google_calendar_id,
+        existing.google_event_id,
+        new Date().toISOString()
+      );
+    }
+
     db.prepare('DELETE FROM events WHERE id = ? AND family_id = ?').run(id, req.user!.family_id);
     res.json({ success: true, message: 'Event deleted.' });
+
+    // Non-blocking immediate Google Calendar deletion
+    if (existing.google_event_id && existing.google_calendar_id) {
+      triggerGoogleDelete({
+        familyId: req.user!.family_id,
+        googleCalendarId: existing.google_calendar_id,
+        googleEventId: existing.google_event_id,
+      });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

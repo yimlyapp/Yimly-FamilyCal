@@ -7,7 +7,7 @@ interface AuthContextType {
   family: Family | null;
   memberProfile: FamilyMember | null;
   isLoading: boolean;
-  login: (email: string, pass: string) => Promise<void>;
+  login: (identifier: string, pass: string) => Promise<void>;
   register: (data: { familyName: string; name: string; email: string; password: string; color?: string; birthday?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -40,10 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, []);
 
-  const login = async (email: string, pass: string) => {
+  const login = async (identifier: string, pass: string) => {
     setIsLoading(true);
     try {
-      const res = await api.login({ email, password: pass });
+      const res = await api.login({ identifier, password: pass });
       if (res.token) {
         localStorage.setItem('yimly_jwt_token', res.token);
       }

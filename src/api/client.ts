@@ -68,10 +68,15 @@ export const api = {
     body: JSON.stringify(data),
   }),
 
-  login: (data: { email: string; password: string }) =>
+  login: (data: { email?: string; username?: string; identifier?: string; password: string }) =>
     fetchJson<{ user: User; token: string; family: Family }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        email: data.email || data.identifier,
+        username: data.username || data.identifier,
+        loginIdentifier: data.identifier || data.username || data.email,
+        password: data.password,
+      }),
     }),
 
   logout: () =>
@@ -85,13 +90,16 @@ export const api = {
   // Family & Members
   getFamily: () => fetchJson<{ family: Family; members: FamilyMember[] }>('/api/family'),
   
+  suggestUsername: (name: string, excludeUserId?: string) =>
+    fetchJson<{ username: string }>(`/api/family/suggest-username?name=${encodeURIComponent(name)}${excludeUserId ? `&excludeUserId=${encodeURIComponent(excludeUserId)}` : ''}`),
+
   updateFamily: (data: { name?: string; timezone?: string }) =>
     fetchJson<Family>('/api/family', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
-  createMember: (data: Partial<FamilyMember>) =>
+  createMember: (data: Partial<FamilyMember> & { login?: { enabled: boolean; username?: string; password?: string } }) =>
     fetchJson<FamilyMember>('/api/family/members', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -102,6 +110,15 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  manageMemberLogin: (id: string, data: { enabled: boolean; username?: string; password?: string }) =>
+    fetchJson<{ success: boolean; message: string; has_login: number; user_is_active: number; user_username?: string }>(
+      `/api/family/members/${id}/login`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    ),
 
   deleteMember: (id: string) =>
     fetchJson<{ success: boolean }>(`/api/family/members/${id}`, {

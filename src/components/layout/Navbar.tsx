@@ -89,12 +89,22 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
         {/* User Pill */}
         {user && (
           <div className="flex items-center gap-2 pl-2 border-l border-[#242C3D]/60">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm"
-              style={{ backgroundColor: user.color || '#FF4FA3' }}
-              title={`${user.name} (${user.role})`}
-            >
-              {user.name.slice(0, 1).toUpperCase()}
+            <div className="flex items-center gap-2">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm"
+                style={{ backgroundColor: user.color || '#FF4FA3' }}
+                title={`${user.name} (${user.role})`}
+              >
+                {user.name.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="hidden lg:flex flex-col text-left">
+                <span className="text-xs font-semibold text-white leading-tight">
+                  {user.name}
+                </span>
+                <span className="text-[10px] text-gray-400 font-mono leading-tight">
+                  {user.username ? `@${user.username}` : user.email}
+                </span>
+              </div>
             </div>
 
             <button

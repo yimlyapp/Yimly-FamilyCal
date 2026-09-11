@@ -9,11 +9,13 @@ const TOKEN_COOKIE_NAME = 'yimly_token';
 export interface AuthUser {
   id: string;
   family_id: string;
-  email: string;
+  email?: string | null;
+  username?: string | null;
   name: string;
   role: 'administrator' | 'adult' | 'child';
   avatar_url?: string;
   color?: string;
+  is_active?: number;
 }
 
 export interface AuthRequest extends Request {
@@ -34,6 +36,7 @@ export function generateToken(user: AuthUser): string {
       id: user.id,
       family_id: user.family_id,
       email: user.email,
+      username: user.username,
       name: user.name,
       role: user.role,
       avatar_url: user.avatar_url,
@@ -65,10 +68,10 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
     
-    // Verify user still exists in database
-    const user = db.prepare('SELECT id, family_id, email, name, role, avatar_url, color FROM users WHERE id = ?').get(decoded.id) as unknown as AuthUser | undefined;
-    if (!user) {
-      return res.status(401).json({ error: 'User no longer exists', code: 401 });
+    // Verify user still exists in database and account is active
+    const user = db.prepare('SELECT id, family_id, email, username, name, role, avatar_url, color, is_active FROM users WHERE id = ?').get(decoded.id) as unknown as (AuthUser & { is_active: number }) | undefined;
+    if (!user || user.is_active === 0) {
+      return res.status(401).json({ error: 'User no longer exists or login is disabled', code: 401 });
     }
 
     req.user = user;
@@ -101,8 +104,8 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
-      const user = db.prepare('SELECT id, family_id, email, name, role, avatar_url, color FROM users WHERE id = ?').get(decoded.id) as unknown as AuthUser | undefined;
-      if (user) {
+      const user = db.prepare('SELECT id, family_id, email, username, name, role, avatar_url, color, is_active FROM users WHERE id = ?').get(decoded.id) as unknown as (AuthUser & { is_active: number }) | undefined;
+      if (user && user.is_active !== 0) {
         req.user = user;
       }
     } catch {

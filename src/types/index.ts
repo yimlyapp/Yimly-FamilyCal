@@ -3,12 +3,14 @@ export type UserRole = 'administrator' | 'adult' | 'child';
 export interface User {
   id: string;
   family_id: string;
-  email: string;
+  email?: string | null;
+  username?: string | null;
   name: string;
   role: UserRole;
   avatar_url?: string;
   color?: string;
   birthday?: string;
+  is_active?: number;
 }
 
 export interface Family {
@@ -30,6 +32,9 @@ export interface FamilyMember {
   birthday?: string | null;
   is_active: number;
   user_email?: string | null;
+  user_username?: string | null;
+  user_is_active?: number | null;
+  has_login?: number | boolean;
 }
 
 export interface Calendar {

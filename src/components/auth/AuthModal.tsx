@@ -8,7 +8,7 @@ export const AuthModal: React.FC = () => {
   
   const [familyName, setFamilyName] = useState('Hort Family');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [birthday, setBirthday] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,18 +21,21 @@ export const AuthModal: React.FC = () => {
 
     try {
       if (isRegisterMode) {
-        if (!familyName.trim() || !name.trim()) {
-          throw new Error('Family name and your name are required.');
+        if (!familyName.trim() || !name.trim() || !identifier.trim()) {
+          throw new Error('Family name, your name, and email are required.');
         }
         await register({
           familyName: familyName.trim(),
           name: name.trim(),
-          email: email.trim(),
+          email: identifier.trim(),
           password,
           birthday: birthday || undefined,
         });
       } else {
-        await login(email.trim(), password);
+        if (!identifier.trim()) {
+          throw new Error('Please enter your username or email.');
+        }
+        await login(identifier.trim(), password);
       }
     } catch (err: any) {
       setError(err?.message || 'Authentication failed. Please check your credentials.');
@@ -105,15 +108,23 @@ export const AuthModal: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
-              <Mail className="w-3.5 h-3.5 text-[#FF4FA3]" /> Email Address *
+              {isRegisterMode ? (
+                <>
+                  <Mail className="w-3.5 h-3.5 text-[#FF4FA3]" /> Email Address *
+                </>
+              ) : (
+                <>
+                  <User className="w-3.5 h-3.5 text-[#FF4FA3]" /> Username or Email *
+                </>
+              )}
             </label>
             <input
-              id="auth-email"
-              type="email"
+              id="auth-identifier"
+              type={isRegisterMode ? 'email' : 'text'}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="family@example.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder={isRegisterMode ? 'family@example.com' : 'e.g. Dad, Mum, or admin@yimly.local'}
               className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
             />
           </div>
@@ -180,7 +191,7 @@ export const AuthModal: React.FC = () => {
               type="button"
               id="fill-demo-credentials-btn"
               onClick={() => {
-                setEmail('admin@yimly.local');
+                setIdentifier('admin@yimly.local');
                 setPassword('yimly123');
               }}
               className="text-[11px] text-gray-400 hover:text-white px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] border border-[#242C3D] transition-colors cursor-pointer"
