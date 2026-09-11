@@ -140,6 +140,21 @@ export const IntegrationsView: React.FC = () => {
               <p className="text-xs text-gray-400">
                 Two-way sync between Yimly FamilyCal and your family Google Calendars.
               </p>
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-1">
+                <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Adheres to Google API Services User Data Policy.</span>
+                <a
+                  href="/privacy"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState(null, '', '/privacy');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="text-[#FF4FA3] hover:underline font-semibold ml-0.5 cursor-pointer"
+                >
+                  Privacy Policy
+                </a>
+              </div>
             </div>
           </div>
 

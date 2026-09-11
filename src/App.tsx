@@ -16,6 +16,7 @@ import { BirthdaysView } from './components/birthdays/BirthdaysView';
 import { FamilyView } from './components/family/FamilyView';
 import { IntegrationsView } from './components/settings/IntegrationsView';
 import { AuthModal } from './components/auth/AuthModal';
+import { PrivacyPolicy } from './components/privacy/PrivacyPolicy';
 import { Loader2 } from 'lucide-react';
 
 function CalendarContainer() {
@@ -37,6 +38,27 @@ function CalendarContainer() {
 function MainDashboard() {
   const { user, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'calendar' | 'tasks' | 'birthdays' | 'family' | 'settings'>('calendar');
+  const [currentPath, setCurrentPath] = useState(typeof window !== 'undefined' ? window.location.pathname : '/');
+
+  React.useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  // Publicly accessible without authentication
+  if (currentPath === '/privacy' || currentPath.startsWith('/privacy')) {
+    return (
+      <PrivacyPolicy
+        onBack={() => {
+          window.history.pushState(null, '', '/');
+          setCurrentPath('/');
+        }}
+      />
+    );
+  }
 
   if (isLoading) {
     return (

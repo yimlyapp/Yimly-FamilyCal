@@ -190,10 +190,24 @@ export const AuthModal: React.FC = () => {
           )}
         </div>
 
-        {/* Self-hosted privacy badge */}
-        <div className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-gray-500">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Self-Hosted & Private SQLite Database</span>
+        {/* Self-hosted privacy badge & public privacy policy link */}
+        <div className="mt-6 flex flex-col items-center gap-2 pt-2">
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Self-Hosted & Private SQLite Database</span>
+          </div>
+          <a
+            href="/privacy"
+            id="auth-privacy-policy-link"
+            onClick={(e) => {
+              e.preventDefault();
+              window.history.pushState(null, '', '/privacy');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+            className="text-[11px] text-gray-400 hover:text-[#FF4FA3] transition-colors underline cursor-pointer"
+          >
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>
