@@ -88,13 +88,13 @@ if %ERRORLEVEL% equ 0 (
     )
 )
 
-:: 8. Check for uncommitted local changes
+:: 8. Check for uncommitted local changes (ignoring .env and backups/)
 set "STATUS_TMP=%TEMP%\yimly_status_%RANDOM%.tmp"
 set "FILTERED_TMP=%TEMP%\yimly_filtered_%RANDOM%.tmp"
 git status --porcelain > "!STATUS_TMP!" 2>&1
 
 :: Filter out allowed local-only directories/files: backups/ and .env
-findstr /v /i /c:" backups/" /c:" backups" /c:" .env" "!STATUS_TMP!" > "!FILTERED_TMP!" 2>nul
+findstr /v /i /c:" backups/" /c:" backups\" /c:" backups" /c:" .env" "!STATUS_TMP!" > "!FILTERED_TMP!" 2>nul
 
 set "DIRTY_COUNT=0"
 for /f %%A in ('type "!FILTERED_TMP!" 2^>nul ^| find /c /v ""') do set "DIRTY_COUNT=%%A"
@@ -143,52 +143,72 @@ if not defined TIMESTAMP (
     set "TIMESTAMP=!TIMESTAMP: =0!"
 )
 
-:: Ensure backups directory exists
+:: Ensure local backups directory exists
 if not exist "backups" (
     mkdir "backups" >nul 2>&1
 )
 
-set "BACKUP_FILE="
+set "BACKUP_FILE=backups\family-calendar-!TIMESTAMP!.db"
 set "DB_FOUND=0"
 
-:: Check for actual SQLite database file: data\yimly_familycal.db
-if exist "data\yimly_familycal.db" (
-    set "DB_FOUND=1"
-    set "BACKUP_FILE=backups\yimly-familycal-!TIMESTAMP!.db"
-    echo Creating backup of host database 'data\yimly_familycal.db'...
-    copy /y "data\yimly_familycal.db" "!BACKUP_FILE!" >nul
-    if %ERRORLEVEL% neq 0 (
-        echo [ERROR] Database backup failed while copying 'data\yimly_familycal.db'.
-        goto :fail
+:: 1. Attempt backup from existing Docker container (familycal or yimly-familycal)
+echo Inspecting Docker container for SQLite database...
+
+:: Check primary container 'familycal'
+docker ps -a --format "{{.Names}}" 2^>nul | findstr /x /c:"familycal" >nul
+if %ERRORLEVEL% equ 0 (
+    :: Try standard SQLite locations inside the container
+    docker cp familycal:/app/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+    if %ERRORLEVEL% equ 0 (
+        set "DB_FOUND=1"
+        docker cp familycal:/app/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
+        docker cp familycal:/app/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
+    ) else (
+        docker cp familycal:/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+        if %ERRORLEVEL% equ 0 (
+            set "DB_FOUND=1"
+            docker cp familycal:/data/family_calendar.sqlite-wal "!BACKUP_FILE!-wal" >nul 2>&1
+            docker cp familycal:/data/family_calendar.sqlite-shm "!BACKUP_FILE!-shm" >nul 2>&1
+        ) else (
+            docker cp familycal:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
+            if %ERRORLEVEL% equ 0 (
+                set "DB_FOUND=1"
+                docker cp familycal:/data/yimly_familycal.db-wal "!BACKUP_FILE!-wal" >nul 2>&1
+                docker cp familycal:/data/yimly_familycal.db-shm "!BACKUP_FILE!-shm" >nul 2>&1
+            )
+        )
     )
-    :: Also copy SQLite WAL and SHM files if present for complete consistency
-    if exist "data\yimly_familycal.db-wal" (
-        copy /y "data\yimly_familycal.db-wal" "backups\yimly-familycal-!TIMESTAMP!.db-wal" >nul 2>&1
-    )
-    if exist "data\yimly_familycal.db-shm" (
-        copy /y "data\yimly_familycal.db-shm" "backups\yimly-familycal-!TIMESTAMP!.db-shm" >nul 2>&1
-    )
-) else if exist "data\family_calendar.sqlite" (
-    set "DB_FOUND=1"
-    set "BACKUP_FILE=backups\family-calendar-!TIMESTAMP!.db"
-    echo Creating backup of legacy database 'data\family_calendar.sqlite'...
-    copy /y "data\family_calendar.sqlite" "!BACKUP_FILE!" >nul
-    if %ERRORLEVEL% neq 0 (
-        echo [ERROR] Database backup failed while copying 'data\family_calendar.sqlite'.
-        goto :fail
-    )
-) else (
-    :: If not mounted directly on host filesystem, check inside running/stopped Docker container
+)
+
+:: Fallback check container 'yimly-familycal' if 'familycal' was not found
+if !DB_FOUND! equ 0 (
     docker ps -a --format "{{.Names}}" 2^>nul | findstr /x /c:"yimly-familycal" >nul
     if %ERRORLEVEL% equ 0 (
-        echo Copying database from Docker container volume 'yimly-familycal:/data/yimly_familycal.db'...
-        set "BACKUP_FILE=backups\yimly-familycal-!TIMESTAMP!.db"
-        docker cp yimly-familycal:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
+        docker cp yimly-familycal:/app/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
         if %ERRORLEVEL% equ 0 (
             set "DB_FOUND=1"
         ) else (
-            set "BACKUP_FILE="
+            docker cp yimly-familycal:/data/family_calendar.sqlite "!BACKUP_FILE!" >nul 2>&1
+            if %ERRORLEVEL% equ 0 (
+                set "DB_FOUND=1"
+            ) else (
+                docker cp yimly-familycal:/data/yimly_familycal.db "!BACKUP_FILE!" >nul 2>&1
+                if %ERRORLEVEL% equ 0 (
+                    set "DB_FOUND=1"
+                )
+            )
         )
+    )
+)
+
+:: Fallback check host filesystem if mounted directly
+if !DB_FOUND! equ 0 (
+    if exist "data\family_calendar.sqlite" (
+        copy /y "data\family_calendar.sqlite" "!BACKUP_FILE!" >nul 2>&1
+        if %ERRORLEVEL% equ 0 set "DB_FOUND=1"
+    ) else if exist "data\yimly_familycal.db" (
+        copy /y "data\yimly_familycal.db" "!BACKUP_FILE!" >nul 2>&1
+        if %ERRORLEVEL% equ 0 set "DB_FOUND=1"
     )
 )
 
@@ -196,14 +216,15 @@ if !DB_FOUND! equ 1 (
     if exist "!BACKUP_FILE!" (
         echo Database successfully backed up to: !BACKUP_FILE!
     ) else (
-        echo [ERROR] Database backup file verification failed.
+        echo [ERROR] Database backup verification failed.
         goto :fail
     )
 ) else (
-    echo No existing database found. Skipping backup.
+    echo No existing database found to back up. A fresh database will be initialized on start.
+    set "BACKUP_FILE="
 )
 
-:: Preserve .env configuration and secrets
+:: Preserve .env configuration and secrets (NEVER overwrite existing .env)
 if exist ".env" (
     echo Existing .env detected - preserving configuration and secrets.
 ) else (
@@ -233,7 +254,7 @@ if %ERRORLEVEL% neq 0 (
     goto :fail
 )
 
-echo Starting updated Yimly FamilyCal service...
+echo Starting updated FamilyCal service...
 docker compose -f docker-compose.yml up -d
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -244,25 +265,25 @@ if %ERRORLEVEL% neq 0 (
     goto :fail
 )
 
-:: Remove dangling/unused build images safely
+:: Clean up dangling/unused build images safely
 echo Pruning dangling images...
 docker image prune -f >nul 2>&1
 
-echo Containers restarted successfully.
+echo Container restart command completed.
 echo.
 
 :: -----------------------------------------------------------------------------
 :: [5/5] Checking health
 :: -----------------------------------------------------------------------------
 echo [5/5] Checking health...
-echo Waiting for container 'yimly-familycal' to report healthy status (up to 60s)...
+echo Waiting for container 'familycal' to report healthy status (up to 60s)...
 
 set "IS_HEALTHY=0"
 
 for /l %%i in (1,1,12) do (
     if !IS_HEALTHY! equ 0 (
         set "CURRENT_STATUS=starting"
-        for /f "delims=" %%s in ('docker inspect --format="{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" yimly-familycal 2^>nul') do set "CURRENT_STATUS=%%s"
+        for /f "delims=" %%s in ('docker inspect --format="{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" familycal 2^>nul') do set "CURRENT_STATUS=%%s"
         
         echo   [Check %%i/12] Status: !CURRENT_STATUS!
 
@@ -270,7 +291,7 @@ for /l %%i in (1,1,12) do (
             set "IS_HEALTHY=1"
         ) else if /i "!CURRENT_STATUS!"=="unhealthy" (
             echo.
-            echo [ERROR] Container 'yimly-familycal' reported UNHEALTHY status.
+            echo [ERROR] Container 'familycal' reported UNHEALTHY status.
             goto :health_failed
         ) else (
             timeout /t 5 /nobreak >nul
@@ -280,7 +301,7 @@ for /l %%i in (1,1,12) do (
 
 if !IS_HEALTHY! neq 1 (
     echo.
-    echo [ERROR] Container 'yimly-familycal' did not become healthy within 60 seconds.
+    echo [ERROR] Container 'familycal' did not become healthy within 60 seconds.
     goto :health_failed
 )
 
@@ -301,15 +322,17 @@ docker compose -f docker-compose.yml ps
 echo.
 
 echo Yimly FamilyCal Networking Summary:
-echo Docker Container:           yimly-familycal
+echo Docker Container:           familycal
 echo Docker Network:             cloudflared_bridge
 echo Network Alias:              familycal
 echo Internal Port:              3000
 echo Host Port:                  Not published
-echo Cloudflare Tunnel Target:   http://yimly-familycal:3000
+echo Cloudflare Tunnel Target:   http://familycal:3000
 echo Public URL:                 https://familycal.robinhort.link
 if defined BACKUP_FILE (
-    echo Database Backup File:       !BACKUP_FILE!
+    if exist "!BACKUP_FILE!" (
+        echo Database Backup File:       !BACKUP_FILE!
+    )
 )
 echo.
 goto :end
@@ -330,7 +353,9 @@ echo Recent container logs (last 100 lines):
 docker compose -f docker-compose.yml logs --tail=100
 echo.
 if defined BACKUP_FILE (
-    echo Database backup is preserved safely at: !BACKUP_FILE!
+    if exist "!BACKUP_FILE!" (
+        echo Database backup is preserved safely at: !BACKUP_FILE!
+    )
 )
 echo.
 echo [ERROR] FamilyCal health check failed.
