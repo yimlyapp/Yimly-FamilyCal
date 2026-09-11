@@ -330,7 +330,7 @@ export async function syncTwoWay(familyId: string, accountId: string) {
 
     // Find all google calendars with sync enabled for this family
     const syncedCalendars = db.prepare(`
-      SELECT * FROM calendars
+      SELECT id, name, color, google_calendar_id, is_read_only, member_id FROM calendars
       WHERE family_id = ? AND source = 'google' AND sync_enabled = 1 AND google_calendar_id IS NOT NULL
     `).all(familyId) as Array<{
       id: string;
@@ -338,6 +338,7 @@ export async function syncTwoWay(familyId: string, accountId: string) {
       color: string;
       google_calendar_id: string;
       is_read_only: number;
+      member_id?: string | null;
     }>;
 
     for (const cal of syncedCalendars) {
@@ -378,6 +379,8 @@ export async function syncTwoWay(familyId: string, accountId: string) {
           item.id
         ) as { id: string } | undefined;
 
+        const targetAssignedMemberIds = cal.member_id ? JSON.stringify([cal.member_id]) : '[]';
+
         if (existing) {
           db.prepare(`
             UPDATE events
@@ -395,11 +398,20 @@ export async function syncTwoWay(familyId: string, accountId: string) {
             now,
             existing.id
           );
+
+          // If the calendar is assigned to a member, ensure existing event is mapped to that member
+          if (cal.member_id) {
+            db.prepare(`
+              UPDATE events
+              SET assigned_member_ids = ?
+              WHERE id = ? AND (assigned_member_ids = '[]' OR assigned_member_ids IS NULL)
+            `).run(targetAssignedMemberIds, existing.id);
+          }
         } else {
           const eventId = 'evt_' + uuidv4().slice(0, 8);
           db.prepare(`
             INSERT INTO events (id, family_id, calendar_id, title, description, location, color, start_time, end_time, all_day, recurring_rule, assigned_member_ids, google_event_id, google_calendar_id, etag, sync_status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', '[]', ?, ?, ?, 'synced', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, 'synced', ?, ?)
           `).run(
             eventId,
             familyId,
@@ -411,6 +423,7 @@ export async function syncTwoWay(familyId: string, accountId: string) {
             startTime,
             endTime,
             isAllDay ? 1 : 0,
+            targetAssignedMemberIds,
             item.id,
             cal.google_calendar_id,
             item.etag || null,

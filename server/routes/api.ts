@@ -290,9 +290,14 @@ router.delete('/family/members/:id', authenticateToken, requireAdmin, (req: Auth
 router.get('/calendars', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const calendars = db.prepare(`
-      SELECT * FROM calendars
-      WHERE family_id = ?
-      ORDER BY is_default DESC, name ASC
+      SELECT 
+        c.*,
+        m.name as member_name,
+        m.color as member_color
+      FROM calendars c
+      LEFT JOIN family_members m ON c.member_id = m.id AND m.family_id = c.family_id
+      WHERE c.family_id = ?
+      ORDER BY c.is_default DESC, c.name ASC
     `).all(req.user!.family_id);
 
     res.json(calendars);
@@ -303,20 +308,41 @@ router.get('/calendars', authenticateToken, (req: AuthRequest, res: Response) =>
 
 router.post('/calendars', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
-    const { name, color, description } = req.body;
+    const { name, color, description, member_id } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Calendar name is required.' });
+    }
+
+    let targetMemberId: string | null = null;
+    if (member_id && member_id !== 'null' && member_id !== 'unassigned') {
+      const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ?').get(
+        member_id,
+        req.user!.family_id
+      );
+      if (!validMember) {
+        return res.status(400).json({ error: 'Selected family member does not exist in this household.' });
+      }
+      targetMemberId = member_id;
     }
 
     const calId = 'cal_' + uuidv4().slice(0, 8);
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO calendars (id, family_id, name, color, description, is_default, source, is_read_only, sync_enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 0, 'yimly', 0, 1, ?, ?)
-    `).run(calId, req.user!.family_id, name.trim(), color || '#FF4FA3', description || null, now, now);
+      INSERT INTO calendars (id, family_id, member_id, name, color, description, is_default, source, is_read_only, sync_enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, 'yimly', 0, 1, ?, ?)
+    `).run(calId, req.user!.family_id, targetMemberId, name.trim(), color || '#FF4FA3', description || null, now, now);
 
-    const created = db.prepare('SELECT * FROM calendars WHERE id = ?').get(calId);
+    const created = db.prepare(`
+      SELECT 
+        c.*,
+        m.name as member_name,
+        m.color as member_color
+      FROM calendars c
+      LEFT JOIN family_members m ON c.member_id = m.id AND m.family_id = c.family_id
+      WHERE c.id = ?
+    `).get(calId);
+
     res.status(201).json(created);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -326,8 +352,36 @@ router.post('/calendars', authenticateToken, (req: AuthRequest, res: Response) =
 router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, color, description, sync_enabled, is_read_only } = req.body;
+    const { name, color, description, sync_enabled, is_read_only, member_id } = req.body;
     const now = new Date().toISOString();
+
+    const existingCal = db.prepare('SELECT * FROM calendars WHERE id = ? AND family_id = ?').get(
+      id,
+      req.user!.family_id
+    ) as any;
+
+    if (!existingCal) {
+      return res.status(404).json({ error: 'Calendar not found.' });
+    }
+
+    let isUpdatingMember = false;
+    let targetMemberId: string | null = null;
+
+    if (member_id !== undefined) {
+      isUpdatingMember = true;
+      if (member_id && member_id !== 'null' && member_id !== 'unassigned') {
+        const validMember = db.prepare('SELECT id FROM family_members WHERE id = ? AND family_id = ?').get(
+          member_id,
+          req.user!.family_id
+        );
+        if (!validMember) {
+          return res.status(400).json({ error: 'Selected family member does not belong to your household.' });
+        }
+        targetMemberId = member_id;
+      } else {
+        targetMemberId = null;
+      }
+    }
 
     db.prepare(`
       UPDATE calendars
@@ -336,6 +390,7 @@ router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response
           description = COALESCE(?, description),
           sync_enabled = COALESCE(?, sync_enabled),
           is_read_only = COALESCE(?, is_read_only),
+          member_id = CASE WHEN ? = 1 THEN ? ELSE member_id END,
           updated_at = ?
       WHERE id = ? AND family_id = ?
     `).run(
@@ -344,12 +399,40 @@ router.put('/calendars/:id', authenticateToken, (req: AuthRequest, res: Response
       description !== undefined ? description : null,
       sync_enabled !== undefined ? (sync_enabled ? 1 : 0) : null,
       is_read_only !== undefined ? (is_read_only ? 1 : 0) : null,
+      isUpdatingMember ? 1 : 0,
+      targetMemberId,
       now,
       id,
       req.user!.family_id
     );
 
-    const updated = db.prepare('SELECT * FROM calendars WHERE id = ?').get(id);
+    // If member assignment was updated, update all existing events on this calendar accordingly
+    if (isUpdatingMember) {
+      if (targetMemberId) {
+        db.prepare(`
+          UPDATE events
+          SET assigned_member_ids = ?
+          WHERE calendar_id = ? AND family_id = ?
+        `).run(JSON.stringify([targetMemberId]), id, req.user!.family_id);
+      } else {
+        db.prepare(`
+          UPDATE events
+          SET assigned_member_ids = '[]'
+          WHERE calendar_id = ? AND family_id = ?
+        `).run(id, req.user!.family_id);
+      }
+    }
+
+    const updated = db.prepare(`
+      SELECT 
+        c.*,
+        m.name as member_name,
+        m.color as member_color
+      FROM calendars c
+      LEFT JOIN family_members m ON c.member_id = m.id AND m.family_id = c.family_id
+      WHERE c.id = ? AND c.family_id = ?
+    `).get(id, req.user!.family_id);
+
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

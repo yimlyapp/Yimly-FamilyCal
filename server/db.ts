@@ -60,6 +60,7 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS calendars (
       id TEXT PRIMARY KEY,
       family_id TEXT NOT NULL,
+      member_id TEXT, -- NULL for shared household calendar, or references family_members(id)
       name TEXT NOT NULL,
       color TEXT DEFAULT '#FF4FA3',
       description TEXT,
@@ -70,7 +71,8 @@ export function initDatabase() {
       sync_enabled INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
+      FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE,
+      FOREIGN KEY (member_id) REFERENCES family_members(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS events (
@@ -161,6 +163,25 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tasks_family ON tasks(family_id, completed);
     CREATE INDEX IF NOT EXISTS idx_members_family ON family_members(family_id);
   `);
+
+  // Safe startup migration: Ensure member_id column exists on calendars in existing databases
+  try {
+    const calendarCols = db.prepare(`PRAGMA table_info(calendars);`).all() as Array<{ name: string }>;
+    const hasMemberId = calendarCols.some((col) => col.name === 'member_id');
+    if (!hasMemberId) {
+      db.prepare(`ALTER TABLE calendars ADD COLUMN member_id TEXT REFERENCES family_members(id) ON DELETE SET NULL;`).run();
+      console.log('Migration applied: added member_id column to calendars table.');
+    }
+  } catch (migErr) {
+    console.warn('Calendar member_id migration check warning:', migErr);
+  }
+
+  // Create index on member_id after column exists
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_calendars_member ON calendars(member_id);`);
+  } catch (idxErr) {
+    console.warn('Index creation warning:', idxErr);
+  }
 
   seedInitialDataIfEmpty();
 }

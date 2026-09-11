@@ -35,6 +35,9 @@ export interface FamilyMember {
 export interface Calendar {
   id: string;
   family_id: string;
+  member_id?: string | null;
+  member_name?: string | null;
+  member_color?: string | null;
   name: string;
   color: string;
   description?: string | null;

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { GoogleConfigResponse, GoogleAccount, GoogleSyncLog, SystemStats } from '../../types';
+import { useCalendar } from '../../context/CalendarContext';
+import { useFamily } from '../../context/FamilyContext';
 import {
   Globe,
   RefreshCw,
@@ -13,16 +15,22 @@ import {
   Layers,
   Clock,
   Trash2,
+  Calendar as CalIcon,
+  UserCheck,
+  Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 export const IntegrationsView: React.FC = () => {
+  const { calendars, updateCalendar, fetchCalendarData } = useCalendar();
+  const { members } = useFamily();
   const [googleConfig, setGoogleConfig] = useState<GoogleConfigResponse | null>(null);
   const [syncLogs, setSyncLogs] = useState<GoogleSyncLog[]>([]);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [updatingCalId, setUpdatingCalId] = useState<string | null>(null);
 
   const loadAll = async () => {
     setIsLoading(true);
@@ -45,6 +53,24 @@ export const IntegrationsView: React.FC = () => {
   useEffect(() => {
     loadAll();
   }, []);
+
+  const handleAssignCalendar = async (calId: string, memberId: string | null) => {
+    setUpdatingCalId(calId);
+    try {
+      const updated = await updateCalendar(calId, { member_id: memberId });
+      const memberName = members.find((m) => m.id === memberId)?.name;
+      setSyncMessage(
+        `Assigned "${updated.name}" to ${memberName || 'Shared Household'}. Existing events updated.`
+      );
+      await fetchCalendarData();
+    } catch (err: any) {
+      setSyncMessage(`Failed to update calendar assignment: ${err?.message}`);
+    } finally {
+      setUpdatingCalId(null);
+    }
+  };
+
+  const googleCalendars = calendars.filter((c) => c.source === 'google');
 
   const handleConnectGoogle = async () => {
     try {
@@ -225,6 +251,87 @@ export const IntegrationsView: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Discovered Google Calendars & Member Assignment */}
+        {googleCalendars.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <CalIcon className="w-3.5 h-3.5 text-[#FF4FA3]" />
+                Discovered Google Calendars ({googleCalendars.length})
+              </h4>
+              <span className="text-[11px] text-gray-400">
+                Assign each calendar to a family member or keep as Shared Household
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {googleCalendars.map((cal) => {
+                const assignedMember = members.find((m) => m.id === cal.member_id);
+                const isSaving = updatingCalId === cal.id;
+
+                return (
+                  <div
+                    key={cal.id}
+                    className="p-3.5 sm:p-4 rounded-2xl bg-[#1A202C] border border-[#242C3D] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className="w-3.5 h-3.5 rounded-full shrink-0 ring-2 ring-[#242C3D]"
+                        style={{ backgroundColor: cal.color || '#4285F4' }}
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-white truncate">{cal.name}</span>
+                          {assignedMember ? (
+                            <span
+                              className="px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shrink-0"
+                              style={{
+                                backgroundColor: `${assignedMember.color}25`,
+                                color: assignedMember.color,
+                                border: `1px solid ${assignedMember.color}40`,
+                              }}
+                            >
+                              <UserCheck className="w-3 h-3" />
+                              {assignedMember.name}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-[#121620] text-gray-400 border border-[#242C3D] text-[10px] font-bold shrink-0">
+                              Shared Household
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                          Google ID: {cal.google_calendar_id || cal.id}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 w-full sm:w-auto justify-between sm:justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-[#242C3D]/60">
+                      <label htmlFor={`assign-cal-${cal.id}`} className="text-[11px] text-gray-400 font-medium whitespace-nowrap">
+                        Assigned Member:
+                      </label>
+                      <select
+                        id={`assign-cal-${cal.id}`}
+                        value={cal.member_id || ''}
+                        disabled={isSaving}
+                        onChange={(e) => handleAssignCalendar(cal.id, e.target.value || null)}
+                        className="bg-[#121620] border border-[#242C3D] text-xs text-white rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#FF4FA3] cursor-pointer disabled:opacity-50 font-medium"
+                      >
+                        <option value="">Shared Household</option>
+                        {members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.role.charAt(0).toUpperCase() + m.role.slice(1)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

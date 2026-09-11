@@ -118,9 +118,24 @@ export const Sidebar: React.FC = () => {
                   </span>
                 </div>
 
-                {isGoogle && (
-                  <Globe className="w-3 h-3 text-blue-400 shrink-0" title="Google Synced" />
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {cal.member_name && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-md text-[9px] font-bold truncate max-w-[70px]"
+                      style={{
+                        backgroundColor: `${cal.member_color || '#FF4FA3'}25`,
+                        color: cal.member_color || '#FF4FA3',
+                        border: `1px solid ${cal.member_color || '#FF4FA3'}40`,
+                      }}
+                      title={`Assigned to ${cal.member_name}`}
+                    >
+                      {cal.member_name}
+                    </span>
+                  )}
+                  {isGoogle && (
+                    <Globe className="w-3 h-3 text-blue-400 shrink-0" title="Google Synced" />
+                  )}
+                </div>
               </label>
             );
           })}
