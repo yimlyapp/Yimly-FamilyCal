@@ -200,7 +200,13 @@ if !DB_FOUND! equ 1 (
 if exist ".env" (
     echo Existing .env detected - preserving configuration and secrets.
 ) else (
-    echo [NOTICE] No local .env file found. Docker will use container environment variables.
+    if exist ".env.example" (
+        echo [NOTICE] No local .env file found. Creating .env from .env.example template...
+        copy ".env.example" ".env" >nul
+        echo Created .env template. Please review and configure your secrets.
+    ) else (
+        echo [NOTICE] No local .env file found.
+    )
 )
 echo.
 
@@ -287,30 +293,16 @@ echo Running container status:
 docker compose -f docker-compose.yml ps
 echo.
 
-:: Determine network target for summary
-docker network inspect cloudflared_bridge >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    set "DETECTED_NET=cloudflared_bridge (external)"
-    set "TUNNEL_TARGET=http://familycal:3000"
-) else (
-    set "DETECTED_NET=cloudflared_bridge (external - not yet created)"
-    set "TUNNEL_TARGET=http://familycal:3000"
-)
-
 echo Yimly FamilyCal Networking Summary:
-echo - Compose Service:          yimly-familycal
-echo - Container Name:           yimly-familycal
-echo - Docker Network:           !DETECTED_NET!
-echo - Network Alias:            familycal
-echo - Internal Port:            3000
-echo - Published Host Port:      3000
-echo - Local URL:                http://localhost:3000
-echo - Public URL:               https://familycal.robinhort.link
-echo - Cloudflare Tunnel Target: !TUNNEL_TARGET!
-echo - Health Endpoint:          http://localhost:3000/api/health
-echo - Google OAuth Callback:    https://familycal.robinhort.link/api/v1/calendar/google/callback
+echo Docker Container:           yimly-familycal
+echo Docker Network:             cloudflared_bridge
+echo Network Alias:              familycal
+echo Internal Port:              3000
+echo Host Port:                  Not published
+echo Cloudflare Tunnel Target:   http://yimly-familycal:3000
+echo Public URL:                 https://familycal.robinhort.link
 if defined BACKUP_FILE (
-    echo - Database Backup File:     !BACKUP_FILE!
+    echo Database Backup File:       !BACKUP_FILE!
 )
 echo.
 goto :end

@@ -6,27 +6,26 @@ services:
       dockerfile: Dockerfile
     container_name: yimly-familycal
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+
+    env_file:
+      - .env
+
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATA_DIR=/data
-      - SESSION_SECRET=replace_with_a_secure_random_session_secret_key
-      - APP_URL=https://familycal.robinhort.link
-      # Optional Google Calendar OAuth 2.0 Integration:
-      # - GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-      # - GOOGLE_CLIENT_SECRET=your-google-client-secret
-      # - GOOGLE_REDIRECT_URI=https://familycal.robinhort.link/api/v1/calendar/google/callback
+      NODE_ENV: production
+      PORT: 3000
+      DATA_DIR: /data
+
     volumes:
       - yimly_data:/data
+
     networks:
       cloudflared_bridge:
         aliases:
           - familycal
           - yimly-familycal
+
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3

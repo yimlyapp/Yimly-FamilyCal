@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import cookieParser from 'cookie-parser';
@@ -10,7 +11,7 @@ async function startServer() {
   initDatabase();
 
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
   // 2. Middlewares
   app.use(express.json({ limit: '10mb' }));
