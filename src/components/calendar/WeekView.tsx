@@ -1,188 +1,260 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import {
   format,
   startOfWeek,
   addDays,
   isSameDay,
   isToday,
-  setHours,
-  setMinutes,
-  differenceInMinutes,
 } from 'date-fns';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
-import { Globe, Repeat, MapPin } from 'lucide-react';
+import { User, Plus, ChevronRight, Globe } from 'lucide-react';
+import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
 
 export const WeekView: React.FC = () => {
-  const { currentDate, filteredEvents, openCreateEventModal, openEditEventModal } = useCalendar();
+  const {
+    currentDate,
+    filteredEvents,
+    openCreateEventModal,
+    openEditEventModal,
+  } = useCalendar();
   const { members } = useFamily();
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const start = startOfWeek(currentDate);
+  // Week starts on Monday (weekStartsOn: 1)
+  const start = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-
-  // Auto-scroll to 8am on mount
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 8 * 60; // 8:00 AM position
-    }
-  }, []);
 
   const getEventsForDay = (day: Date) => {
     return filteredEvents.filter((evt) => {
       const evtStart = new Date(evt.start_time);
       const evtEnd = new Date(evt.end_time);
-      return isSameDay(evtStart, day) || (day >= evtStart && day <= evtEnd);
+
+      if (isSameDay(evtStart, day) || (day >= evtStart && day <= evtEnd)) return true;
+
+      if (evt.recurring_rule === 'daily' && day >= evtStart) {
+        if (!evt.recurring_until || day <= new Date(evt.recurring_until)) return true;
+      }
+      if (evt.recurring_rule === 'weekly' && day >= evtStart) {
+        if (day.getDay() === evtStart.getDay()) {
+          if (!evt.recurring_until || day <= new Date(evt.recurring_until)) return true;
+        }
+      }
+      if (evt.recurring_rule === 'monthly' && day >= evtStart) {
+        if (day.getDate() === evtStart.getDate()) {
+          if (!evt.recurring_until || day <= new Date(evt.recurring_until)) return true;
+        }
+      }
+      if (evt.recurring_rule === 'yearly' && day >= evtStart) {
+        if (day.getMonth() === evtStart.getMonth() && day.getDate() === evtStart.getDate()) {
+          if (!evt.recurring_until || day <= new Date(evt.recurring_until)) return true;
+        }
+      }
+
+      return false;
     });
   };
 
   return (
-    <div id="calendar-week-view" className="flex flex-col flex-1 bg-[#0B0D13] rounded-2xl border border-[#242C3D]/60 overflow-hidden shadow-md">
-      {/* Week Header: Days & Date Labels */}
-      <div className="grid grid-cols-8 border-b border-[#242C3D]/60 bg-[#121620]">
-        {/* Time column header */}
-        <div className="py-3 text-center text-xs font-semibold text-gray-500 border-r border-[#242C3D]/40">
-          GMT
-        </div>
-        {/* 7 Days Headers */}
+    <div id="calendar-week-view" className="flex flex-col flex-1 gap-4">
+      {/* --- DESKTOP WEEK VIEW (Matching Reference Top-Left Layout) --- */}
+      <div className="hidden md:flex flex-col gap-3.5">
         {weekDays.map((day) => {
+          const dayEvents = getEventsForDay(day);
           const isDayToday = isToday(day);
+
           return (
             <div
               key={day.toISOString()}
-              className={`py-2.5 text-center flex flex-col items-center justify-center border-r border-[#242C3D]/40 last:border-r-0 ${
-                isDayToday ? 'bg-[#FF4FA3]/10' : ''
-              }`}
+              className="flex items-start gap-4 p-2 rounded-2xl transition-colors hover:bg-gray-100/50"
             >
-              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                {format(day, 'EEE')}
-              </span>
-              <span
-                className={`text-sm font-bold mt-0.5 flex items-center justify-center rounded-lg w-7 h-7 ${
-                  isDayToday ? 'bg-[#FF4FA3] text-white shadow-xs' : 'text-gray-200'
-                }`}
-              >
-                {format(day, 'd')}
-              </span>
+              {/* Left Day/Date Column */}
+              <div className="w-16 shrink-0 pt-1 flex flex-col items-start select-none">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  {format(day, 'EEE')}
+                </span>
+                <span
+                  className={`text-2xl font-extrabold leading-none mt-0.5 ${
+                    isDayToday ? 'text-blue-600' : 'text-slate-800'
+                  }`}
+                >
+                  {format(day, 'd')}
+                </span>
+              </div>
+
+              {/* Right Events Grid (Side by side cards like Reference Image) */}
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3.5 min-h-[72px]">
+                {dayEvents.length === 0 ? (
+                  <button
+                    onClick={() => openCreateEventModal(day)}
+                    className="h-full min-h-[64px] rounded-2xl border border-dashed border-gray-200/80 bg-white/40 hover:bg-white text-gray-400 hover:text-gray-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer group"
+                  >
+                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform text-blue-500" />
+                    <span>Add event for {format(day, 'EEEE')}</span>
+                  </button>
+                ) : (
+                  dayEvents.map((evt) => {
+                    const assignedMember = members.find((m) =>
+                      evt.assigned_member_ids?.includes(m.id)
+                    );
+                    const memberColor = assignedMember?.color || evt.member_color || evt.color;
+                    const colorInfo = getPastelColorInfo(memberColor);
+                    const eventType = getEventTypeInfo(evt.title);
+                    const memberName = assignedMember?.name || evt.member_name || 'Family';
+
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => openEditEventModal(evt)}
+                        style={{
+                          backgroundColor: colorInfo.hex,
+                          borderColor: colorInfo.borderHex,
+                        }}
+                        className="p-4 rounded-2xl border shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-2.5 group relative overflow-hidden active:scale-99"
+                      >
+                        {/* Top Row: Member Avatar & Name + Event Type Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-2xs shrink-0"
+                              style={{
+                                backgroundColor: colorInfo.dotHex,
+                                color: '#FFFFFF',
+                              }}
+                            >
+                              {memberName.slice(0, 1).toUpperCase()}
+                            </div>
+                            <span className="text-xs font-bold text-slate-800 tracking-tight">
+                              {memberName}
+                            </span>
+                          </div>
+
+                          {/* Event Category/Type Badge Pill */}
+                          <div
+                            className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white flex items-center gap-1 shadow-2xs shrink-0"
+                            style={{ backgroundColor: eventType.bgHex }}
+                          >
+                            <span>{eventType.icon}</span>
+                            <span>{eventType.name}</span>
+                          </div>
+                        </div>
+
+                        {/* Title & Time */}
+                        <div className="flex flex-col">
+                          <h4 className="text-sm font-bold text-slate-900 leading-snug group-hover:text-blue-900 transition-colors">
+                            {evt.title}
+                          </h4>
+                          <span className="text-xs font-semibold text-slate-600 opacity-90 mt-0.5">
+                            {evt.all_day
+                              ? 'All Day'
+                              : `${format(new Date(evt.start_time), 'h:mm a')} – ${format(
+                                  new Date(evt.end_time),
+                                  'h:mm a'
+                                )}`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Hourly Grid Scrollable Area */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto max-h-[640px] divide-y divide-[#242C3D]/30 bg-[#0B0D13] relative scrollbar-thin scrollbar-thumb-[#242C3D]"
-      >
-        <div className="grid grid-cols-8 relative min-h-[1440px]">
-          {/* Time Labels Column */}
-          <div className="border-r border-[#242C3D]/40 bg-[#0E111A]">
-            {hours.map((hour) => (
-              <div
-                key={hour}
-                className="h-[60px] border-b border-[#242C3D]/30 pr-2 text-right text-[11px] font-mono text-gray-500 pt-1 select-none"
-              >
-                {format(setHours(new Date(), hour), 'HH:00')}
+      {/* --- MOBILE WEEK VIEW (Matching Reference Middle-Right Layout) --- */}
+      <div className="flex md:hidden flex-col gap-4">
+        {weekDays.map((day) => {
+          const dayEvents = getEventsForDay(day);
+          const isDayToday = isToday(day);
+
+          return (
+            <div key={day.toISOString()} className="flex items-start gap-3">
+              {/* Left Day Column */}
+              <div className="w-12 shrink-0 pt-0.5 flex flex-col items-start select-none">
+                <span className="text-[11px] font-bold text-gray-400 uppercase">
+                  {format(day, 'EEE')}
+                </span>
+                <span
+                  className={`text-xl font-black leading-none mt-0.5 ${
+                    isDayToday ? 'text-blue-600' : 'text-slate-800'
+                  }`}
+                >
+                  {format(day, 'd')}
+                </span>
               </div>
-            ))}
-          </div>
 
-          {/* 7 Days Columns */}
-          {weekDays.map((day) => {
-            const dayEvents = getEventsForDay(day);
-            const isDayToday = isToday(day);
+              {/* Right Events Stack */}
+              <div className="flex-1 flex flex-col gap-2.5">
+                {dayEvents.length === 0 ? (
+                  <div className="py-2.5 px-3 rounded-2xl bg-white border border-dashed border-gray-200 text-gray-400 text-xs font-medium">
+                    No events
+                  </div>
+                ) : (
+                  dayEvents.map((evt) => {
+                    const assignedMember = members.find((m) =>
+                      evt.assigned_member_ids?.includes(m.id)
+                    );
+                    const memberColor = assignedMember?.color || evt.member_color || evt.color;
+                    const colorInfo = getPastelColorInfo(memberColor);
+                    const eventType = getEventTypeInfo(evt.title);
+                    const memberName = assignedMember?.name || evt.member_name || 'Family';
 
-            return (
-              <div
-                key={day.toISOString()}
-                className={`relative border-r border-[#242C3D]/40 last:border-r-0 ${
-                  isDayToday ? 'bg-[#FF4FA3]/5' : ''
-                }`}
-              >
-                {/* 24 Hour Slots */}
-                {hours.map((hour) => (
-                  <div
-                    key={hour}
-                    onClick={() => {
-                      const clickedTime = setMinutes(setHours(day, hour), 0);
-                      openCreateEventModal(clickedTime);
-                    }}
-                    className="h-[60px] border-b border-[#242C3D]/25 hover:bg-[#1A202C]/40 cursor-pointer transition-colors"
-                  />
-                ))}
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => openEditEventModal(evt)}
+                        style={{
+                          backgroundColor: colorInfo.hex,
+                          borderColor: colorInfo.borderHex,
+                        }}
+                        className="p-3.5 rounded-2xl border shadow-2xs active:scale-98 transition-transform cursor-pointer flex flex-col gap-2"
+                      >
+                        {/* Member & Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
+                              style={{ backgroundColor: colorInfo.dotHex }}
+                            >
+                              {memberName.slice(0, 1).toUpperCase()}
+                            </div>
+                            <span className="text-xs font-bold text-slate-800">
+                              {memberName}
+                            </span>
+                          </div>
 
-                {/* Event Blocks positioned absolutely */}
-                {dayEvents.map((evt) => {
-                  const startD = new Date(evt.start_time);
-                  const endD = new Date(evt.end_time);
-                  const startMin = startD.getHours() * 60 + startD.getMinutes();
-                  let durationMin = differenceInMinutes(endD, startD);
-                  if (durationMin < 25) durationMin = 25;
-                  if (evt.all_day) durationMin = 50;
+                          <div
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white flex items-center gap-0.5 shadow-2xs"
+                            style={{ backgroundColor: eventType.bgHex }}
+                          >
+                            <span>{eventType.icon}</span>
+                            <span>{eventType.name}</span>
+                          </div>
+                        </div>
 
-                  const topPx = evt.all_day ? 0 : startMin;
-                  const heightPx = evt.all_day ? 45 : durationMin;
-
-                  const assignedMembers = members.filter((m) =>
-                    evt.assigned_member_ids?.includes(m.id)
-                  );
-                  const isGoogle = evt.google_event_id || evt.calendar_source === 'google';
-
-                  return (
-                    <div
-                      key={evt.id}
-                      id={`week-evt-${evt.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditEventModal(evt);
-                      }}
-                      style={{
-                        top: `${topPx}px`,
-                        height: `${Math.max(heightPx, 28)}px`,
-                        borderLeftColor: evt.color || '#FF4FA3',
-                      }}
-                      className="absolute inset-x-1 p-1.5 rounded-lg bg-[#181F2E]/95 hover:bg-[#20293D] border-l-4 border-y border-r border-[#242C3D] shadow-md hover:shadow-lg transition-all z-10 cursor-pointer overflow-hidden flex flex-col justify-between"
-                    >
-                      <div className="flex items-start justify-between gap-1">
-                        <span className="text-[11px] font-bold text-white truncate leading-tight">
-                          {evt.title}
-                        </span>
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          {evt.recurring_rule !== 'none' && (
-                            <Repeat className="w-2.5 h-2.5 text-gray-400" />
-                          )}
-                          {isGoogle && (
-                            <Globe className="w-2.5 h-2.5 text-blue-400" />
-                          )}
+                        {/* Title & Time */}
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900 leading-snug">
+                            {evt.title}
+                          </h4>
+                          <span className="text-[11px] font-semibold text-slate-600 block mt-0.5">
+                            {evt.all_day
+                              ? 'All Day'
+                              : `${format(new Date(evt.start_time), 'h:mm a')} – ${format(
+                                  new Date(evt.end_time),
+                                  'h:mm a'
+                                )}`}
+                          </span>
                         </div>
                       </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-gray-400 mt-0.5 font-mono">
-                        <span>
-                          {evt.all_day ? 'All day' : `${format(startD, 'HH:mm')} - ${format(endD, 'HH:mm')}`}
-                        </span>
-
-                        {assignedMembers.length > 0 && (
-                          <div className="flex -space-x-1">
-                            {assignedMembers.map((m) => (
-                              <span
-                                key={m.id}
-                                className="w-2.5 h-2.5 rounded-full border border-[#181F2E]"
-                                style={{ backgroundColor: m.color }}
-                                title={m.name}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

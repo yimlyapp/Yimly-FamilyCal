@@ -1,30 +1,29 @@
 import React from 'react';
 import {
   Calendar,
-  CheckSquare,
-  Cake,
   Users,
+  Bell,
   Settings,
 } from 'lucide-react';
+import { MainTabType } from './Navbar';
 
 interface MobileNavProps {
-  activeTab: 'calendar' | 'tasks' | 'birthdays' | 'family' | 'settings';
-  setActiveTab: (t: 'calendar' | 'tasks' | 'birthdays' | 'family' | 'settings') => void;
+  activeTab: MainTabType;
+  setActiveTab: (t: MainTabType) => void;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-    { id: 'birthdays', label: 'Birthdays', icon: Cake },
-    { id: 'family', label: 'Household', icon: Users },
+    { id: 'family', label: 'Family', icon: Users },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
 
   return (
-    <div
+    <nav
       id="mobile-bottom-nav"
-      className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0E111A]/95 backdrop-blur-md border-t border-[#242C3D]/80 flex items-center justify-around px-2 z-40"
+      className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around px-2 z-40 pb-safe shadow-lg"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
@@ -34,16 +33,25 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, setActiveTab })
           <button
             key={tab.id}
             id={`mobile-tab-${tab.id}`}
+            type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer ${
-              isActive ? 'text-[#FF4FA3]' : 'text-gray-400 hover:text-gray-200'
+            className={`flex flex-col items-center justify-center flex-1 py-1.5 min-h-[48px] transition-all cursor-pointer ${
+              isActive ? 'text-blue-600 font-bold' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''}`} />
-            <span className="text-[10px] font-semibold mt-1">{tab.label}</span>
+            <div
+              className={`p-1 rounded-xl transition-all ${
+                isActive ? 'text-blue-600' : ''
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+            </div>
+            <span className={`text-[10px] tracking-tight mt-0.5 ${isActive ? 'font-bold' : 'font-medium'}`}>
+              {tab.label}
+            </span>
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 };

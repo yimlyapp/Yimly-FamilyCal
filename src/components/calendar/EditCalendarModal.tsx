@@ -10,27 +10,15 @@ import {
   Users,
   Globe,
   Loader2,
-  Check,
   Trash2,
 } from 'lucide-react';
+import { PastelColorPicker, getPastelColorInfo } from '../../utils/colors';
 
 interface EditCalendarModalProps {
   calendar: Calendar | null;
   isOpen: boolean;
   onClose: () => void;
 }
-
-const PRESET_COLORS = [
-  '#FF4FA3',
-  '#06B6D4',
-  '#10B981',
-  '#F59E0B',
-  '#8B5CF6',
-  '#EC4899',
-  '#3B82F6',
-  '#EF4444',
-  '#14B8A6',
-];
 
 export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
   calendar,
@@ -42,7 +30,7 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
   const { hasPermission, isAdmin } = useAuth();
 
   const [name, setName] = useState('');
-  const [color, setColor] = useState('#FF4FA3');
+  const [color, setColor] = useState('#F8BBD0');
   const [memberId, setMemberId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -54,7 +42,7 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
   useEffect(() => {
     if (calendar && isOpen) {
       setName(calendar.name);
-      setColor(calendar.color || '#FF4FA3');
+      setColor(calendar.color || '#F8BBD0');
       setMemberId(calendar.member_id || '');
       setError(null);
     }
@@ -64,6 +52,7 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
 
   const activeMembers = members.filter((m) => m.is_active !== 0);
   const isGoogle = calendar.source === 'google';
+  const colorInfo = getPastelColorInfo(color);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,26 +99,29 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
   return (
     <div
       id="edit-calendar-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         id="edit-calendar-dialog"
-        className="relative bg-[#121620] border border-[#242C3D] rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95 my-8"
+        className="relative bg-white border border-gray-200 rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 my-0 sm:my-8"
       >
+        {/* Mobile Drag Indicator */}
+        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-3 sm:hidden" />
+
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#242C3D]">
+        <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <div
-              className="w-4 h-4 rounded-full shadow-xs shrink-0"
-              style={{ backgroundColor: color }}
+              className="w-4 h-4 rounded-full border shrink-0 shadow-2xs"
+              style={{ backgroundColor: colorInfo.hex, borderColor: colorInfo.borderHex }}
             />
-            <h3 className="text-lg font-bold text-white tracking-tight">Edit Calendar</h3>
+            <h3 className="text-base sm:text-lg font-bold text-gray-900 tracking-tight font-serif">Edit Calendar</h3>
             {isGoogle && (
-              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                <Globe className="w-2.5 h-2.5" /> Google Synced
+              <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                <Globe className="w-2.5 h-2.5" /> Google
               </span>
             )}
           </div>
@@ -137,14 +129,14 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
             id="close-edit-calendar-button"
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
             {error}
           </div>
         )}
@@ -155,9 +147,9 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
           <div>
             <label
               htmlFor="edit-cal-name-input"
-              className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5"
+              className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5"
             >
-              <CalIcon className="w-3.5 h-3.5 text-[#FF4FA3]" /> Calendar Name
+              <CalIcon className="w-3.5 h-3.5 text-gray-500" /> Calendar Name
             </label>
             <input
               id="edit-cal-name-input"
@@ -166,32 +158,16 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Dad's Work, School, Family..."
-              className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3] transition-colors"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900 transition-colors"
             />
           </div>
 
-          {/* Color Picker */}
+          {/* Color Picker with 15 Pastel Shades */}
           <div>
-            <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5">
-              <Palette className="w-3.5 h-3.5 text-[#FF4FA3]" /> Color
+            <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-gray-500" /> Color (15 Pastel Colours)
             </label>
-            <div className="flex items-center gap-1.5 flex-wrap pt-1">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  style={{ backgroundColor: c }}
-                  className={`w-7 h-7 rounded-full transition-transform cursor-pointer flex items-center justify-center ${
-                    color === c
-                      ? 'ring-2 ring-white ring-offset-2 ring-offset-[#121620] scale-110'
-                      : 'opacity-80 hover:opacity-100'
-                  }`}
-                >
-                  {color === c && <Check className="w-3.5 h-3.5 text-white drop-shadow-sm" />}
-                </button>
-              ))}
-            </div>
+            <PastelColorPicker selectedColor={color} onSelectColor={setColor} />
           </div>
 
           {/* Assigned Member dropdown */}
@@ -199,15 +175,15 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
             <div>
               <label
                 htmlFor="edit-cal-member-select"
-                className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1.5"
+                className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5"
               >
-                <Users className="w-3.5 h-3.5 text-[#FF4FA3]" /> Assigned Member
+                <Users className="w-3.5 h-3.5 text-gray-500" /> Assigned Member
               </label>
               <select
                 id="edit-cal-member-select"
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
-                className="w-full bg-[#1A202C] border border-[#242C3D] text-xs text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#FF4FA3] cursor-pointer font-medium"
+                className="w-full bg-gray-50 border border-gray-200 text-xs text-gray-900 rounded-xl px-3 py-2.5 focus:outline-none focus:border-gray-900 cursor-pointer font-medium"
               >
                 <option value="">Shared Household</option>
                 {activeMembers.map((m) => (
@@ -217,37 +193,33 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
                 ))}
               </select>
               <p className="text-[11px] text-gray-500 mt-1">
-                Assign to a specific member or leave as Shared Household.
+                Assign to a specific family member or leave as Shared Household.
               </p>
             </div>
           )}
 
           {/* Google Calendar Informational Banner */}
           {isGoogle && (
-            <div className="p-3 rounded-2xl bg-[#0E111A] border border-[#242C3D]/60 space-y-1 text-xs">
-              <div className="flex items-center gap-1.5 text-gray-300 font-medium">
-                <Globe className="w-3.5 h-3.5 text-blue-400" />
+            <div className="p-3 rounded-2xl bg-blue-50/50 border border-blue-100 space-y-1 text-xs">
+              <div className="flex items-center gap-1.5 text-blue-900 font-semibold">
+                <Globe className="w-3.5 h-3.5 text-blue-600" />
                 <span>Google Calendar Details</span>
               </div>
-              <p className="text-[11px] text-gray-400 break-all font-mono">
+              <p className="text-[11px] text-gray-600 break-all font-mono">
                 ID: {calendar.google_calendar_id || calendar.id}
-              </p>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                The friendly name chosen here customizes how this calendar is displayed across
-                FamilyCal. Your Google account connection and event sync remain unchanged.
               </p>
             </div>
           )}
 
           {/* Form Actions */}
-          <div className="flex items-center justify-between pt-3 border-t border-[#242C3D]">
+          <div className="flex items-center justify-between pt-3 border-t border-gray-100">
             {canDeleteCalendar ? (
               <button
                 id="delete-calendar-button"
                 type="button"
                 onClick={handleDelete}
                 disabled={isSubmitting || isDeleting}
-                className="px-3 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
                 {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 Delete
@@ -260,7 +232,7 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting || isDeleting}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white hover:bg-[#1A202C] transition-colors cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -268,10 +240,10 @@ export const EditCalendarModal: React.FC<EditCalendarModalProps> = ({
                 id="save-calendar-button"
                 type="submit"
                 disabled={isSubmitting || isDeleting}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#FF4FA3] hover:bg-[#e63e90] transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-md shadow-[#FF4FA3]/20"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-800 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-xs"
               >
                 {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Save
+                Save Changes
               </button>
             </div>
           </div>

@@ -31,19 +31,8 @@ import {
   Eye,
   EyeOff,
   Sliders,
-  RotateCcw,
 } from 'lucide-react';
-
-const PRESET_MEMBER_COLORS = [
-  '#FF4FA3', // Pink
-  '#06B6D4', // Cyan
-  '#10B981', // Emerald
-  '#F59E0B', // Amber
-  '#8B5CF6', // Purple
-  '#EC4899', // Rose
-  '#3B82F6', // Blue
-  '#F97316', // Orange
-];
+import { PastelColorPicker, getPastelColorInfo } from '../../utils/colors';
 
 export const FamilyView: React.FC = () => {
   const {
@@ -68,7 +57,7 @@ export const FamilyView: React.FC = () => {
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [memberName, setMemberName] = useState('');
   const [memberRole, setMemberRole] = useState<UserRole>('adult');
-  const [memberColor, setMemberColor] = useState('#FF4FA3');
+  const [memberColor, setMemberColor] = useState('#F8BBD0');
   const [memberBirthday, setMemberBirthday] = useState('');
   const [newMemberCreateLogin, setNewMemberCreateLogin] = useState(false);
   const [newMemberUsername, setNewMemberUsername] = useState('');
@@ -100,7 +89,7 @@ export const FamilyView: React.FC = () => {
     setEditingMember(null);
     setMemberName('');
     setMemberRole('adult');
-    setMemberColor(PRESET_MEMBER_COLORS[members.length % PRESET_MEMBER_COLORS.length]);
+    setMemberColor('#F8BBD0');
     setMemberBirthday('');
     setNewMemberCreateLogin(false);
     setNewMemberUsername('');
@@ -113,7 +102,7 @@ export const FamilyView: React.FC = () => {
     setEditingMember(m);
     setMemberName(m.name);
     setMemberRole(m.role);
-    setMemberColor(m.color || '#FF4FA3');
+    setMemberColor(m.color || '#F8BBD0');
     setMemberBirthday(m.birthday || '');
     setError(null);
     setIsMemberModalOpen(true);
@@ -295,30 +284,44 @@ export const FamilyView: React.FC = () => {
     }
   };
 
-  const getRoleIcon = (role: UserRole) => {
+  const getRoleBadge = (role: UserRole) => {
     switch (role) {
       case 'administrator':
-        return <Shield className="w-4 h-4 text-[#FF4FA3]" />;
+        return (
+          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-900 border border-pink-200">
+            <Shield className="w-3 h-3 text-pink-700" /> Admin
+          </span>
+        );
       case 'child':
-        return <Baby className="w-4 h-4 text-cyan-400" />;
+        return (
+          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 border border-cyan-200">
+            <Baby className="w-3 h-3 text-cyan-700" /> Child
+          </span>
+        );
       default:
-        return <UserCheck className="w-4 h-4 text-emerald-400" />;
+        return (
+          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
+            <UserCheck className="w-3 h-3 text-emerald-700" /> Adult
+          </span>
+        );
     }
   };
 
   return (
-    <div id="family-view-container" className="flex flex-col flex-1 max-w-5xl mx-auto w-full space-y-6">
+    <div id="family-view-container" className="flex flex-col flex-1 max-w-5xl mx-auto w-full space-y-6 pb-12">
       {/* Household Profile Card */}
-      <div className="p-6 rounded-3xl bg-[#121620] border border-[#242C3D] shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-6 rounded-3xl bg-white border border-gray-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <Users className="w-6 h-6 text-[#FF4FA3]" />
-            <h2 className="text-2xl font-bold text-white tracking-tight font-serif">
-              {family?.name || 'My Family'}
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-[#F8BBD0] border border-[#F472B6]/40 flex items-center justify-center shadow-2xs">
+              <Users className="w-5 h-5 text-[#831843]" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight font-serif">
+              {family?.name || 'Household Family'}
             </h2>
           </div>
-          <p className="text-xs text-gray-400 mt-1 flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-gray-500" /> Timezone: {family?.timezone || 'UTC'}
+          <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-gray-400" /> Timezone: {family?.timezone || 'UTC'}
             <span>•</span>
             <span>{members.length} Household {members.length === 1 ? 'Member' : 'Members'}</span>
           </p>
@@ -332,18 +335,18 @@ export const FamilyView: React.FC = () => {
                   type="text"
                   value={householdName}
                   onChange={(e) => setHouseholdName(e.target.value)}
-                  className="bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:border-gray-900"
                 />
                 <button
                   type="submit"
-                  className="p-2 rounded-xl bg-[#FF4FA3] text-white hover:bg-[#e63e90] cursor-pointer"
+                  className="p-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsEditingHousehold(false)}
-                  className="p-2 rounded-xl bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
+                  className="p-2 rounded-xl bg-gray-100 text-gray-600 hover:text-gray-900 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -355,7 +358,7 @@ export const FamilyView: React.FC = () => {
                   setHouseholdTimezone(family?.timezone || 'UTC');
                   setIsEditingHousehold(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold border border-[#242C3D] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-semibold border border-gray-200 transition-colors cursor-pointer"
               >
                 Edit Household
               </button>
@@ -366,7 +369,7 @@ export const FamilyView: React.FC = () => {
             <button
               id="add-family-member-btn"
               onClick={openAddModal}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold transition-all shadow-md shadow-[#FF4FA3]/25 cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Add Member</span>
@@ -380,37 +383,42 @@ export const FamilyView: React.FC = () => {
         {members.map((member) => {
           const isCurrentUser = member.user_id === user?.id;
           const canEditThisMember = isAdmin || isCurrentUser || canManageMembers;
+          const colorInfo = getPastelColorInfo(member.color);
 
           return (
             <div
               key={member.id}
               id={`member-card-${member.id}`}
-              className="p-5 rounded-3xl bg-[#121620] border border-[#242C3D] hover:border-[#242C3D]/90 shadow-sm flex flex-col justify-between space-y-4"
+              style={{ backgroundColor: colorInfo.bgSoft, borderColor: colorInfo.borderHex }}
+              className="p-5 rounded-3xl border shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold text-white shadow-md relative"
-                    style={{ backgroundColor: member.color || '#FF4FA3' }}
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold shadow-xs border relative"
+                    style={{
+                      backgroundColor: colorInfo.hex,
+                      color: colorInfo.textHex,
+                      borderColor: colorInfo.borderHex,
+                    }}
                   >
                     {member.name.slice(0, 1).toUpperCase()}
                     {isCurrentUser && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-[#121620]" title="You" />
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white" title="You" />
                     )}
                   </div>
 
                   <div>
-                    <h3 className="text-base font-bold text-white flex items-center gap-1.5">
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-1.5">
                       {member.name}
                       {isCurrentUser && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                           You
                         </span>
                       )}
                     </h3>
-                    <div className="flex items-center gap-1 text-xs text-gray-400 capitalize mt-0.5">
-                      {getRoleIcon(member.role)}
-                      <span>{member.role}</span>
+                    <div className="mt-1">
+                      {getRoleBadge(member.role)}
                     </div>
                   </div>
                 </div>
@@ -419,7 +427,7 @@ export const FamilyView: React.FC = () => {
                   {isAdmin && (
                     <button
                       onClick={() => openPermissionsModal(member)}
-                      className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-cyan-400 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-xl hover:bg-black/5 text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
                       title="Manage Permissions"
                       id={`manage-perms-btn-${member.id}`}
                     >
@@ -429,7 +437,7 @@ export const FamilyView: React.FC = () => {
                   {isAdmin && (
                     <button
                       onClick={() => openLoginModal(member)}
-                      className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-[#FF4FA3] transition-colors cursor-pointer"
+                      className="p-1.5 rounded-xl hover:bg-black/5 text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
                       title="Manage Member Login"
                       id={`manage-login-btn-${member.id}`}
                     >
@@ -439,7 +447,7 @@ export const FamilyView: React.FC = () => {
                   {canEditThisMember && (
                     <button
                       onClick={() => openEditModal(member)}
-                      className="p-1.5 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded-xl hover:bg-black/5 text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
                       title="Edit Member"
                     >
                       <Edit2 className="w-4 h-4" />
@@ -448,7 +456,7 @@ export const FamilyView: React.FC = () => {
                   {members.length > 1 && !isCurrentUser && isAdmin && (
                     <button
                       onClick={() => handleDeleteMember(member.id, member.name)}
-                      className="p-1.5 rounded-xl hover:bg-red-500/10 text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-xl hover:bg-red-100 text-gray-500 hover:text-red-700 transition-colors cursor-pointer"
                       title="Remove Member"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -458,48 +466,42 @@ export const FamilyView: React.FC = () => {
               </div>
 
               {/* Member details */}
-              <div className="pt-3 border-t border-[#242C3D]/60 space-y-2 text-xs text-gray-400">
+              <div className="pt-3 border-t border-black/10 space-y-2 text-xs text-gray-700">
                 {member.birthday ? (
                   <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-gray-500">
-                      <Calendar className="w-3.5 h-3.5 text-[#FF4FA3]" /> Birthday:
+                    <span className="flex items-center gap-1 text-gray-600">
+                      <Calendar className="w-3.5 h-3.5 text-pink-600" /> Birthday:
                     </span>
-                    <span className="font-mono text-gray-200">{member.birthday}</span>
+                    <span className="font-semibold text-gray-900">{member.birthday}</span>
                   </div>
                 ) : (
-                  <div className="text-gray-600 text-[11px]">No birthday registered</div>
+                  <div className="text-gray-400 text-[11px]">No birthday registered</div>
                 )}
 
                 {/* Member Login Details */}
-                <div className="pt-2 border-t border-[#242C3D]/40 flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                    <Lock className="w-3 h-3 text-[#FF4FA3]" /> FamilyCal Login:
+                <div className="pt-2 border-t border-black/5 flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[11px] text-gray-600">
+                    <Lock className="w-3 h-3 text-pink-600" /> Login:
                   </span>
                   {member.user_id ? (
                     member.user_is_active === 0 ? (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
                         Disabled
                       </span>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-mono text-emerald-400 font-semibold">
+                        <span className="text-[11px] font-mono text-emerald-800 font-bold">
                           {member.user_username || member.name}
                         </span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" title="Active login" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" title="Active login" />
                       </div>
                     )
                   ) : (
-                    <span className="text-[11px] text-gray-500 italic">
+                    <span className="text-[11px] text-gray-400 italic">
                       No login account
                     </span>
                   )}
                 </div>
-
-                {member.user_email && !member.user_email.endsWith('@yimly.local') && (
-                  <div className="text-[11px] text-gray-500 truncate font-mono">
-                    {member.user_email}
-                  </div>
-                )}
               </div>
             </div>
           );
@@ -508,29 +510,29 @@ export const FamilyView: React.FC = () => {
 
       {/* Member Edit / Add Modal */}
       {isMemberModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className="bg-[#121620] border border-[#242C3D] rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#242C3D]">
-              <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900 font-serif">
                 {editingMember ? 'Edit Family Member' : 'Add Family Member'}
               </h3>
               <button
                 onClick={() => setIsMemberModalOpen(false)}
-                className="p-1 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white"
+                className="p-1 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleMemberSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Full Name *
                 </label>
                 <input
@@ -544,18 +546,18 @@ export const FamilyView: React.FC = () => {
                     }
                   }}
                   placeholder="e.g. Robin, Sophie, Leo..."
-                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Family Role
                 </label>
                 <select
                   value={memberRole}
                   onChange={(e) => setMemberRole(e.target.value as UserRole)}
-                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900 font-medium"
                 >
                   <option value="adult">Adult</option>
                   <option value="administrator">Administrator</option>
@@ -564,44 +566,30 @@ export const FamilyView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
-                  <Palette className="w-3.5 h-3.5 text-[#FF4FA3]" /> Member Accent Color
+                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                  <Palette className="w-3.5 h-3.5 text-gray-500" /> Member Pastel Color
                 </label>
-                <div className="flex items-center gap-2 pt-1">
-                  {PRESET_MEMBER_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setMemberColor(c)}
-                      style={{ backgroundColor: c }}
-                      className={`w-7 h-7 rounded-full cursor-pointer transition-transform ${
-                        memberColor === c
-                          ? 'ring-2 ring-white ring-offset-2 ring-offset-[#121620] scale-110'
-                          : 'opacity-70 hover:opacity-100'
-                      }`}
-                    />
-                  ))}
-                </div>
+                <PastelColorPicker selectedColor={memberColor} onSelectColor={setMemberColor} />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-[#FF4FA3]" /> Birthday (Optional)
+                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-gray-500" /> Birthday (Optional)
                 </label>
                 <input
                   type="date"
                   value={memberBirthday}
                   onChange={(e) => setMemberBirthday(e.target.value)}
-                  className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#FF4FA3]"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900"
                 />
               </div>
 
               {/* Administrator option to create login for new member */}
               {!editingMember && isAdmin && (
-                <div className="p-3.5 rounded-2xl bg-[#1A202C]/80 border border-[#242C3D] space-y-3">
+                <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-200 flex items-center gap-1.5 cursor-pointer">
-                      <Key className="w-3.5 h-3.5 text-[#FF4FA3]" />
+                    <label className="text-xs font-semibold text-gray-800 flex items-center gap-1.5 cursor-pointer">
+                      <Key className="w-3.5 h-3.5 text-[#DB2777]" />
                       <span>Create Member Login Account</span>
                     </label>
                     <input
@@ -614,14 +602,14 @@ export const FamilyView: React.FC = () => {
                           setNewMemberUsername(memberName.trim().split(' ')[0] || memberName.trim());
                         }
                       }}
-                      className="w-4 h-4 rounded text-[#FF4FA3] focus:ring-[#FF4FA3] bg-[#121620] border-[#242C3D] cursor-pointer"
+                      className="w-4 h-4 rounded text-gray-900 focus:ring-gray-900 cursor-pointer"
                     />
                   </div>
 
                   {newMemberCreateLogin && (
                     <div className="space-y-2.5 pt-1">
                       <div>
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1">
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                           Username (e.g. Dad, Mum, Kid) *
                         </label>
                         <input
@@ -630,11 +618,11 @@ export const FamilyView: React.FC = () => {
                           value={newMemberUsername}
                           onChange={(e) => setNewMemberUsername(e.target.value)}
                           placeholder="e.g. Dad"
-                          className="w-full bg-[#121620] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
+                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-medium text-gray-400 mb-1">
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
                           Password (min 4 characters) *
                         </label>
                         <input
@@ -643,7 +631,7 @@ export const FamilyView: React.FC = () => {
                           value={newMemberPassword}
                           onChange={(e) => setNewMemberPassword(e.target.value)}
                           placeholder="Set login password"
-                          className="w-full bg-[#121620] border border-[#242C3D] rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
+                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
                         />
                       </div>
                     </div>
@@ -651,18 +639,18 @@ export const FamilyView: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#242C3D]">
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsMemberModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold"
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold shadow-md shadow-[#FF4FA3]/25"
+                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? 'Saving...' : editingMember ? 'Update Member' : 'Add Member'}
                 </button>
@@ -674,63 +662,67 @@ export const FamilyView: React.FC = () => {
 
       {/* Admin Manage Permissions Modal */}
       {permModalMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-[#121620] border border-[#242C3D] rounded-3xl w-full max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in-95 my-8">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#242C3D]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in-95 my-8">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow"
-                  style={{ backgroundColor: permModalMember.color || '#FF4FA3' }}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs"
+                  style={{
+                    backgroundColor: getPastelColorInfo(permModalMember.color).hex,
+                    color: getPastelColorInfo(permModalMember.color).textHex,
+                    borderColor: getPastelColorInfo(permModalMember.color).borderHex,
+                  }}
                 >
                   {permModalMember.name.slice(0, 1).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-1.5">
-                    <Sliders className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-1.5 font-serif">
+                    <Sliders className="w-4 h-4 text-gray-700" />
                     Member Permissions
                   </h3>
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-[11px] text-gray-500">
                     {permModalMember.name} • <span className="capitalize">{permModalMember.role}</span>
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setPermModalMember(null)}
-                className="p-1 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
+                className="p-1 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {permError && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{permError}</span>
               </div>
             )}
 
             {permSuccess && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{permSuccess}</span>
               </div>
             )}
 
             {/* Role Presets */}
-            <div className="mb-4 p-3 rounded-2xl bg-[#0E111A] border border-[#242C3D]/80 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-gray-400 font-medium">Quick Presets:</span>
+            <div className="mb-4 p-3 rounded-2xl bg-gray-50 border border-gray-200 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-gray-600 font-semibold">Quick Presets:</span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleResetPermissions('adult')}
-                  className="px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] text-[11px] font-semibold text-emerald-400 border border-emerald-500/20 transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-[11px] font-semibold text-emerald-800 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
                 >
                   Adult Defaults
                 </button>
                 <button
                   type="button"
                   onClick={() => handleResetPermissions('child')}
-                  className="px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] text-[11px] font-semibold text-cyan-400 border border-cyan-500/20 transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-[11px] font-semibold text-cyan-800 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
                 >
                   Child Defaults
                 </button>
@@ -738,7 +730,7 @@ export const FamilyView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleResetPermissions('admin')}
-                    className="px-2.5 py-1 rounded-lg bg-[#1A202C] hover:bg-[#242C3D] text-[11px] font-semibold text-[#FF4FA3] border border-[#FF4FA3]/20 transition-colors cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-gray-900 text-white hover:bg-gray-800 text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
                   >
                     Full Admin
                   </button>
@@ -759,28 +751,28 @@ export const FamilyView: React.FC = () => {
 
                 return (
                   <div key={cat} className="space-y-2">
-                    <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                       {catTitles[cat]}
                     </h4>
-                    <div className="space-y-1.5 bg-[#0E111A] p-3 rounded-2xl border border-[#242C3D]/60">
+                    <div className="space-y-1.5 bg-gray-50 p-3 rounded-2xl border border-gray-200">
                       {catDefs.map((def) => {
                         const isChecked = Boolean(memberPermissions[def.key]);
                         return (
                           <label
                             key={def.key}
-                            className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-[#1A202C]/60 cursor-pointer transition-colors"
+                            className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white cursor-pointer transition-colors"
                           >
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleTogglePermission(def.key)}
-                              className="mt-0.5 w-4 h-4 rounded text-[#FF4FA3] focus:ring-[#FF4FA3] bg-[#121620] border-[#242C3D] cursor-pointer"
+                              className="mt-0.5 w-4 h-4 rounded text-gray-900 focus:ring-gray-900 cursor-pointer"
                             />
                             <div className="flex-1">
-                              <span className="text-xs font-semibold text-white block">
+                              <span className="text-xs font-semibold text-gray-900 block">
                                 {def.label}
                               </span>
-                              <span className="text-[11px] text-gray-400 block leading-tight">
+                              <span className="text-[11px] text-gray-500 block leading-tight">
                                 {def.description}
                               </span>
                             </div>
@@ -792,18 +784,18 @@ export const FamilyView: React.FC = () => {
                 );
               })}
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#242C3D]">
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setPermModalMember(null)}
-                  className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={permSubmitting}
-                  className="px-5 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold shadow-md shadow-[#FF4FA3]/25 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {permSubmitting ? 'Saving...' : 'Save Permissions'}
                 </button>
@@ -815,55 +807,59 @@ export const FamilyView: React.FC = () => {
 
       {/* Admin Manage Login Modal */}
       {loginModalMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className="bg-[#121620] border border-[#242C3D] rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#242C3D]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow"
-                  style={{ backgroundColor: loginModalMember.color || '#FF4FA3' }}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs"
+                  style={{
+                    backgroundColor: getPastelColorInfo(loginModalMember.color).hex,
+                    color: getPastelColorInfo(loginModalMember.color).textHex,
+                    borderColor: getPastelColorInfo(loginModalMember.color).borderHex,
+                  }}
                 >
                   {loginModalMember.name.slice(0, 1).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-gray-900 font-serif">
                     Manage Member Login
                   </h3>
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-[11px] text-gray-500">
                     {loginModalMember.name} • {loginModalMember.role}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setLoginModalMember(null)}
-                className="p-1 rounded-xl hover:bg-[#1A202C] text-gray-400 hover:text-white cursor-pointer"
+                className="p-1 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {loginError && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{loginError}</span>
               </div>
             )}
 
             {loginSuccess && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{loginSuccess}</span>
               </div>
             )}
 
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               {/* Enable / Disable toggle */}
-              <div className="p-3.5 rounded-2xl bg-[#1A202C] border border-[#242C3D] flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-between">
                 <div>
-                  <label className="text-xs font-semibold text-white block">
+                  <label className="text-xs font-semibold text-gray-900 block">
                     Login Account Enabled
                   </label>
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-[11px] text-gray-500">
                     {loginEnabled
                       ? 'Member can sign into FamilyCal with their credentials'
                       : 'Login access is disabled for this member'}
@@ -875,12 +871,12 @@ export const FamilyView: React.FC = () => {
                   checked={loginEnabled}
                   disabled={loginModalMember.user_id === user?.id}
                   onChange={(e) => setLoginEnabled(e.target.checked)}
-                  className="w-5 h-5 rounded text-[#FF4FA3] focus:ring-[#FF4FA3] bg-[#121620] border-[#242C3D] cursor-pointer disabled:opacity-50"
+                  className="w-5 h-5 rounded text-gray-900 focus:ring-gray-900 cursor-pointer disabled:opacity-50"
                 />
               </div>
 
               {loginModalMember.user_id === user?.id && (
-                <p className="text-[11px] text-amber-400/90 px-1">
+                <p className="text-[11px] text-amber-700 px-1">
                   Note: This is your active administrator account.
                 </p>
               )}
@@ -889,8 +885,8 @@ export const FamilyView: React.FC = () => {
                 <>
                   {/* Username Field */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
-                      <User className="w-3.5 h-3.5 text-[#FF4FA3]" /> Username *
+                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-gray-500" /> Username *
                     </label>
                     <input
                       type="text"
@@ -898,7 +894,7 @@ export const FamilyView: React.FC = () => {
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
                       placeholder="e.g. Dad, Mum, Kid"
-                      className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
                     />
                     <p className="text-[11px] text-gray-500 mt-1">
                       Used by this family member to sign into FamilyCal.
@@ -907,8 +903,8 @@ export const FamilyView: React.FC = () => {
 
                   {/* Password Field */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-[#FF4FA3]" />
+                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-gray-500" />
                       {loginModalMember.has_login
                         ? 'Set New Password (optional)'
                         : 'Initial Password *'}
@@ -924,12 +920,12 @@ export const FamilyView: React.FC = () => {
                             ? 'Leave blank to keep existing password'
                             : 'Min 4 characters'
                         }
-                        className="w-full bg-[#1A202C] border border-[#242C3D] rounded-xl px-3.5 py-2 pr-10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#FF4FA3]"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 pr-10 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
                       />
                       <button
                         type="button"
                         onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-300 cursor-pointer"
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-700 cursor-pointer"
                       >
                         {showLoginPassword ? (
                           <EyeOff className="w-3.5 h-3.5" />
@@ -947,18 +943,18 @@ export const FamilyView: React.FC = () => {
                 </>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#242C3D]">
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setLoginModalMember(null)}
-                  className="px-4 py-2 rounded-xl bg-[#1A202C] hover:bg-[#242C3D] text-gray-300 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loginSubmitting}
-                  className="px-5 py-2 rounded-xl bg-[#FF4FA3] hover:bg-[#e63e90] text-white text-xs font-bold shadow-md shadow-[#FF4FA3]/25 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {loginSubmitting ? 'Saving...' : 'Save Login Settings'}
                 </button>

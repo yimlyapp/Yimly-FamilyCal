@@ -43,7 +43,12 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'week';
+    }
+    return 'month';
+  });
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [eventModalInitialDate, setEventModalInitialDate] = useState<Date | null>(null);
