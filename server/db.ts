@@ -87,7 +87,6 @@ export function initDatabase() {
       description TEXT,
       location TEXT,
       color TEXT,
-      event_type TEXT DEFAULT 'Other', -- School, Sport, Appointment, Work, Birthday, Holiday, Social, Important, Other
       start_time TEXT NOT NULL,
       end_time TEXT NOT NULL,
       all_day INTEGER DEFAULT 0,
@@ -110,7 +109,7 @@ export function initDatabase() {
       family_id TEXT NOT NULL,
       name TEXT NOT NULL,
       color TEXT NOT NULL,
-      icon TEXT,
+      icon TEXT DEFAULT '⭐',
       is_default INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -242,18 +241,6 @@ export function initDatabase() {
     console.warn('User table migration check warning:', userMigErr);
   }
 
-  // Create indexes after columns exist
-  try {
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_calendars_member ON calendars(member_id);
-      CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-      CREATE INDEX IF NOT EXISTS idx_users_family_username ON users(family_id, username);
-      CREATE INDEX IF NOT EXISTS idx_event_types_family ON event_types(family_id);
-    `);
-  } catch (idxErr) {
-    console.warn('Index creation warning:', idxErr);
-  }
-
   // Safe startup migration: Ensure event_type column exists on events in existing databases
   try {
     const eventCols = db.prepare(`PRAGMA table_info(events);`).all() as Array<{ name: string }>;
@@ -262,44 +249,64 @@ export function initDatabase() {
       db.prepare(`ALTER TABLE events ADD COLUMN event_type TEXT DEFAULT 'Other';`).run();
       console.log('Migration applied: added event_type column to events table.');
     }
-    // Preserve all existing events. If an existing event has no event type, assign it default type 'Other'
-    db.prepare(`UPDATE events SET event_type = 'Other' WHERE event_type IS NULL OR event_type = '';`).run();
-  } catch (evtMigErr) {
-    console.warn('Events table migration check warning:', evtMigErr);
+
+    // Assign default 'Other' to any existing event that has no event type
+    db.prepare(`UPDATE events SET event_type = 'Other' WHERE event_type IS NULL OR TRIM(event_type) = '';`).run();
+
+    // Make sure all existing families have default event types seeded
+    const existingFamilies = db.prepare('SELECT id FROM families').all() as Array<{ id: string }>;
+    for (const fam of existingFamilies) {
+      seedDefaultEventTypesForFamily(fam.id);
+    }
+  } catch (eventMigErr) {
+    console.warn('Event table migration check warning:', eventMigErr);
   }
 
-  // Seed default event types for all families that don't have them
+  // Create indexes after columns exist
   try {
-    const families = db.prepare(`SELECT id FROM families;`).all() as Array<{ id: string }>;
-    const nowIso = new Date().toISOString();
-    for (const fam of families) {
-      const typeCount = (db.prepare(`SELECT COUNT(*) as c FROM event_types WHERE family_id = ?;`).get(fam.id) as any)?.c || 0;
-      if (typeCount === 0) {
-        const insertType = db.prepare(`
-          INSERT INTO event_types (id, family_id, name, color, icon, is_default, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-        `);
-        const defaults = [
-          { id: 'type_school_' + fam.id, name: 'School', color: '#EAB308', icon: '🎓' },
-          { id: 'type_sport_' + fam.id, name: 'Sport', color: '#3B82F6', icon: '⚽' },
-          { id: 'type_appt_' + fam.id, name: 'Appointment', color: '#22C55E', icon: '🩺' },
-          { id: 'type_work_' + fam.id, name: 'Work', color: '#F97316', icon: '💼' },
-          { id: 'type_bday_' + fam.id, name: 'Birthday', color: '#EC4899', icon: '🎁' },
-          { id: 'type_holiday_' + fam.id, name: 'Holiday', color: '#8B5CF6', icon: '🏖️' },
-          { id: 'type_social_' + fam.id, name: 'Social', color: '#C084FC', icon: '🍸' },
-          { id: 'type_important_' + fam.id, name: 'Important', color: '#EF4444', icon: '⚡' },
-          { id: 'type_other_' + fam.id, name: 'Other', color: '#64748B', icon: '📌' },
-        ];
-        for (const t of defaults) {
-          insertType.run(t.id, fam.id, t.name, t.color, t.icon, nowIso, nowIso);
-        }
-      }
-    }
-  } catch (typeMigErr) {
-    console.warn('Event types seed check warning:', typeMigErr);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_calendars_member ON calendars(member_id);
+      CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+      CREATE INDEX IF NOT EXISTS idx_users_family_username ON users(family_id, username);
+      CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(family_id, event_type);
+      CREATE INDEX IF NOT EXISTS idx_event_types_family ON event_types(family_id);
+    `);
+  } catch (idxErr) {
+    console.warn('Index creation warning:', idxErr);
   }
 
   seedInitialDataIfEmpty();
+}
+
+export function seedDefaultEventTypesForFamily(familyId: string) {
+  try {
+    const existing = (db.prepare('SELECT COUNT(*) as count FROM event_types WHERE family_id = ?').get(familyId) as { count: number }).count;
+    if (existing > 0) return;
+
+    const now = new Date().toISOString();
+    const defaultTypes = [
+      { name: 'School', color: '#EAB308', icon: '🎓' },
+      { name: 'Sport', color: '#3B82F6', icon: '⚽' },
+      { name: 'Appointment', color: '#10B981', icon: '🩺' },
+      { name: 'Work', color: '#F97316', icon: '💼' },
+      { name: 'Birthday', color: '#EC4899', icon: '🎁' },
+      { name: 'Holiday', color: '#8B5CF6', icon: '🏖️' },
+      { name: 'Social', color: '#C084FC', icon: '🍸' },
+      { name: 'Important', color: '#EF4444', icon: '⚡' },
+      { name: 'Other', color: '#64748B', icon: '⭐' },
+    ];
+
+    const insertStmt = db.prepare(`
+      INSERT INTO event_types (id, family_id, name, color, icon, is_default, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `);
+
+    for (const t of defaultTypes) {
+      insertStmt.run('et_' + uuidv4().slice(0, 8), familyId, t.name, t.color, t.icon, now, now);
+    }
+  } catch (err) {
+    console.warn('seedDefaultEventTypesForFamily error:', err);
+  }
 }
 
 function seedInitialDataIfEmpty() {
@@ -366,6 +373,8 @@ function seedInitialDataIfEmpty() {
   insertCal.run(calSchoolId, familyId, 'School & Lessons', '#F59E0B', 'School schedules, classes, and activities', 0, now, now);
   insertCal.run(calSportsId, familyId, 'Sports & Fitness', '#10B981', 'Practices, games, and gym sessions', 0, now, now);
 
+  seedDefaultEventTypesForFamily(familyId);
+
   // 5. Seed Helpful Sample Events for current month & week
   const today = new Date();
   const year = today.getFullYear();
@@ -380,8 +389,8 @@ function seedInitialDataIfEmpty() {
   };
 
   const insertEvent = db.prepare(`
-    INSERT INTO events (id, family_id, calendar_id, title, description, location, color, start_time, end_time, all_day, recurring_rule, assigned_member_ids, sync_status, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local_only', ?, ?, ?)
+    INSERT INTO events (id, family_id, calendar_id, title, description, location, color, event_type, start_time, end_time, all_day, recurring_rule, assigned_member_ids, sync_status, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local_only', ?, ?, ?)
   `);
 
   // Event 1: Today Dinner
@@ -393,6 +402,7 @@ function seedInitialDataIfEmpty() {
     'Pizza making and watching the new animated movie together.',
     'Home Living Room',
     '#FF4FA3',
+    'Social',
     makeIsoDate(0, 18, 30),
     makeIsoDate(0, 21, 0),
     0,
@@ -412,6 +422,7 @@ function seedInitialDataIfEmpty() {
     'Bring water bottle and shin guards. Coach Dan.',
     'Community Park Field 2',
     '#10B981',
+    'Sport',
     makeIsoDate(1, 16, 0),
     makeIsoDate(1, 17, 30),
     0,
@@ -431,6 +442,7 @@ function seedInitialDataIfEmpty() {
     'Leo and Maya presenting their solar system model.',
     'Oak Elementary Gym',
     '#F59E0B',
+    'School',
     makeIsoDate(3, 8, 0),
     makeIsoDate(3, 15, 0),
     1,
@@ -450,6 +462,7 @@ function seedInitialDataIfEmpty() {
     'Annual cleaning with Dr. Harris',
     'Downtown Dental Clinic',
     '#06B6D4',
+    'Appointment',
     makeIsoDate(5, 10, 0),
     makeIsoDate(5, 11, 30),
     0,

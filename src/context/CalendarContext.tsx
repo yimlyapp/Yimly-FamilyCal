@@ -1,15 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Calendar, CalendarEvent, CalendarViewMode, GoogleAccount, EventTypeDefinition } from '../types';
+import { Calendar, CalendarEvent, CalendarViewMode, GoogleAccount, EventType } from '../types';
 import { api } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useFamily } from './FamilyContext';
-import { DEFAULT_EVENT_TYPES } from '../utils/colors';
 
 interface CalendarContextType {
   calendars: Calendar[];
   events: CalendarEvent[];
   filteredEvents: CalendarEvent[];
-  eventTypes: EventTypeDefinition[];
+  eventTypes: EventType[];
   currentDate: Date;
   viewMode: CalendarViewMode;
   selectedEvent: CalendarEvent | null;
@@ -33,10 +32,10 @@ interface CalendarContextType {
   createCalendar: (data: { name: string; color?: string; description?: string; member_id?: string | null }) => Promise<Calendar>;
   updateCalendar: (id: string, data: Partial<Calendar>) => Promise<Calendar>;
   deleteCalendar: (id: string) => Promise<void>;
-  triggerGoogleSync: () => Promise<{ success: boolean; eventsSynced: number }>;
-  createEventType: (data: { name: string; color: string; icon?: string }) => Promise<EventTypeDefinition>;
-  updateEventType: (id: string, data: { name?: string; color?: string; icon?: string }) => Promise<EventTypeDefinition>;
+  createEventType: (data: { name: string; color: string; icon?: string }) => Promise<EventType>;
+  updateEventType: (id: string, data: Partial<EventType>) => Promise<EventType>;
   deleteEventType: (id: string) => Promise<void>;
+  triggerGoogleSync: () => Promise<{ success: boolean; eventsSynced: number }>;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(undefined);
@@ -47,7 +46,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [eventTypes, setEventTypes] = useState<EventTypeDefinition[]>(DEFAULT_EVENT_TYPES);
+  const [eventTypes, setEventTypes] = useState<EventType[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -68,26 +67,23 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setCalendars([]);
       setEvents([]);
+      setEventTypes([]);
       return;
     }
 
     setIsLoading(true);
     try {
-      const [calsRes, evtsRes, gAccountsRes, typesRes] = await Promise.all([
+      const [calsRes, evtsRes, gAccountsRes, eventTypesRes] = await Promise.all([
         api.getCalendars(),
         api.getEvents(),
         api.getGoogleAccounts().catch(() => []),
-        api.getEventTypes().catch(() => DEFAULT_EVENT_TYPES),
+        api.getEventTypes().catch(() => []),
       ]);
 
       setCalendars(calsRes);
       setEvents(evtsRes);
       setGoogleAccounts(gAccountsRes);
-      if (typesRes && typesRes.length > 0) {
-        setEventTypes(typesRes);
-      } else {
-        setEventTypes(DEFAULT_EVENT_TYPES);
-      }
+      setEventTypes(eventTypesRes);
 
       // Default select all calendars initially if not set
       setSelectedCalendarIds((prev) => {
@@ -185,6 +181,23 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await fetchCalendarData();
   };
 
+  const createEventType = async (data: { name: string; color: string; icon?: string }) => {
+    const created = await api.createEventType(data);
+    await fetchCalendarData();
+    return created;
+  };
+
+  const updateEventType = async (id: string, data: Partial<EventType>) => {
+    const updated = await api.updateEventType(id, data);
+    await fetchCalendarData();
+    return updated;
+  };
+
+  const deleteEventType = async (id: string) => {
+    await api.deleteEventType(id);
+    await fetchCalendarData();
+  };
+
   const triggerGoogleSync = async () => {
     setIsSyncing(true);
     try {
@@ -195,23 +208,6 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  };
-
-  const createEventType = async (data: { name: string; color: string; icon?: string }) => {
-    const created = await api.createEventType(data);
-    await fetchCalendarData();
-    return created;
-  };
-
-  const updateEventType = async (id: string, data: { name?: string; color?: string; icon?: string }) => {
-    const updated = await api.updateEventType(id, data);
-    await fetchCalendarData();
-    return updated;
-  };
-
-  const deleteEventType = async (id: string) => {
-    await api.deleteEventType(id);
-    await fetchCalendarData();
   };
 
   return (
@@ -244,10 +240,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         createCalendar,
         updateCalendar,
         deleteCalendar,
-        triggerGoogleSync,
         createEventType,
         updateEventType,
         deleteEventType,
+        triggerGoogleSync,
       }}
     >
       {children}

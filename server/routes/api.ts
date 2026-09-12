@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db.js';
+import { db, seedDefaultEventTypesForFamily } from '../db.js';
 import {
   authenticateToken,
   requireAdmin,
@@ -986,6 +986,138 @@ router.delete('/calendars/:id', authenticateToken, (req: AuthRequest, res: Respo
 });
 
 // ==========================================
+// 3B. EVENT TYPES & PREASSIGNED BADGE COLOURS
+// ==========================================
+
+router.get('/event-types', authenticateToken, (req: AuthRequest, res: Response) => {
+  try {
+    seedDefaultEventTypesForFamily(req.user!.family_id);
+
+    const types = db.prepare(`
+      SELECT * FROM event_types
+      WHERE family_id = ?
+      ORDER BY is_default DESC, name ASC
+    `).all(req.user!.family_id) as any[];
+
+    res.json(types);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/event-types', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const { name, color, icon } = req.body;
+    if (!name || !color) {
+      return res.status(400).json({ error: 'Name and colour are required for event type.' });
+    }
+
+    const id = 'et_' + uuidv4().slice(0, 8);
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO event_types (id, family_id, name, color, icon, is_default, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(
+      id,
+      req.user!.family_id,
+      name.trim(),
+      color.trim(),
+      icon?.trim() || '⭐',
+      now,
+      now
+    );
+
+    const created = db.prepare('SELECT * FROM event_types WHERE id = ?').get(id);
+    res.status(201).json(created);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/event-types/:id', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, color, icon } = req.body;
+
+    const existing = db.prepare('SELECT * FROM event_types WHERE id = ? AND family_id = ?').get(
+      id,
+      req.user!.family_id
+    ) as any;
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Event type not found.' });
+    }
+
+    const now = new Date().toISOString();
+    const newName = name?.trim() || existing.name;
+    const newColor = color?.trim() || existing.color;
+    const newIcon = icon !== undefined ? (icon.trim() || '⭐') : existing.icon;
+
+    db.prepare(`
+      UPDATE event_types
+      SET name = ?, color = ?, icon = ?, updated_at = ?
+      WHERE id = ? AND family_id = ?
+    `).run(
+      newName,
+      newColor,
+      newIcon,
+      now,
+      id,
+      req.user!.family_id
+    );
+
+    // If name changed, update events using this event type to maintain consistency
+    if (newName !== existing.name) {
+      db.prepare('UPDATE events SET event_type = ? WHERE event_type = ? AND family_id = ?').run(
+        newName,
+        existing.name,
+        req.user!.family_id
+      );
+    }
+
+    const updated = db.prepare('SELECT * FROM event_types WHERE id = ?').get(id);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/event-types/:id', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const existing = db.prepare('SELECT * FROM event_types WHERE id = ? AND family_id = ?').get(
+      id,
+      req.user!.family_id
+    ) as any;
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Event type not found.' });
+    }
+
+    if (existing.name === 'Other') {
+      return res.status(400).json({ error: 'Default "Other" event type cannot be deleted.' });
+    }
+
+    // Reassign any events using this type to default 'Other'
+    db.prepare('UPDATE events SET event_type = "Other" WHERE event_type = ? AND family_id = ?').run(
+      existing.name,
+      req.user!.family_id
+    );
+
+    db.prepare('DELETE FROM event_types WHERE id = ? AND family_id = ?').run(
+      id,
+      req.user!.family_id
+    );
+
+    res.json({ success: true, message: 'Event type deleted.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // 4. EVENTS & RECURRENCE
 // ==========================================
 
@@ -1019,16 +1151,7 @@ router.get('/events', authenticateToken, (req: AuthRequest, res: Response) => {
 
     const rawEvents = db.prepare(query).all(...params) as any[];
 
-    // Fetch members map to attach member_name and member_color
-    const membersList = db.prepare('SELECT id, name, color FROM family_members WHERE family_id = ?').all(
-      req.user!.family_id
-    ) as Array<{ id: string; name: string; color: string }>;
-    const membersMap = new Map<string, { name: string; color: string }>();
-    for (const m of membersList) {
-      membersMap.set(m.id, m);
-    }
-
-    // Parse JSON member IDs, ensure default event_type 'Other', and handle client filtering
+    // Parse JSON member IDs and handle client filtering
     let events = rawEvents.map((evt) => {
       let assignedMemberIds: string[] = [];
       try {
@@ -1036,12 +1159,9 @@ router.get('/events', authenticateToken, (req: AuthRequest, res: Response) => {
       } catch {
         assignedMemberIds = [];
       }
-      const primaryMember = assignedMemberIds.length > 0 ? membersMap.get(assignedMemberIds[0]) : null;
       return {
         ...evt,
         event_type: evt.event_type || 'Other',
-        member_name: primaryMember ? primaryMember.name : (evt.member_name || undefined),
-        member_color: primaryMember ? primaryMember.color : (evt.member_color || evt.color),
         all_day: Boolean(evt.all_day),
         assigned_member_ids: assignedMemberIds,
       };
@@ -1107,13 +1227,10 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
       finalMemberIds = [cal.member_id];
     }
 
-    // Determine event background colour from assigned family member
+    // Member selection determines full event-card background colour
     let eventColor = color;
     if (finalMemberIds.length > 0) {
-      const memberRow = db.prepare('SELECT color FROM family_members WHERE id = ? AND family_id = ?').get(
-        finalMemberIds[0],
-        req.user!.family_id
-      ) as { color: string } | undefined;
+      const memberRow = db.prepare('SELECT color FROM family_members WHERE id = ?').get(finalMemberIds[0]) as any;
       if (memberRow?.color) {
         eventColor = memberRow.color;
       }
@@ -1122,7 +1239,8 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
       eventColor = cal?.color || '#F8BBD0';
     }
 
-    const eventTypeValue = (event_type && typeof event_type === 'string' && event_type.trim()) ? event_type.trim() : 'Other';
+    const finalEventType = (event_type && typeof event_type === 'string' && event_type.trim()) ? event_type.trim() : 'Other';
+
     const memberIdsJson = JSON.stringify(finalMemberIds);
     const isGoogleCal = cal?.source === 'google';
     const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, finalMemberIds);
@@ -1143,7 +1261,7 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
       description || null,
       location || null,
       eventColor,
-      eventTypeValue,
+      finalEventType,
       start_time,
       end_time,
       all_day ? 1 : 0,
@@ -1165,7 +1283,7 @@ router.post('/events', authenticateToken, async (req: AuthRequest, res: Response
 
     res.status(201).json({
       ...created,
-      event_type: created.event_type || eventTypeValue,
+      event_type: created.event_type || finalEventType,
       all_day: Boolean(created.all_day),
       assigned_member_ids: JSON.parse(created.assigned_member_ids || '[]'),
     });
@@ -1221,25 +1339,19 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
     const effectiveMembers = assigned_member_ids !== undefined
       ? assigned_member_ids
       : JSON.parse(existing.assigned_member_ids || '[]');
+    const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, effectiveMembers);
+    const syncStatus = targetGoogle ? 'pending' : (cal?.source === 'google' ? 'pending' : existing.sync_status);
 
-    // Determine event background colour from assigned family member
-    let finalColor = color || existing.color;
-    if (Array.isArray(effectiveMembers) && effectiveMembers.length > 0) {
-      const memberRow = db.prepare('SELECT color FROM family_members WHERE id = ? AND family_id = ?').get(
-        effectiveMembers[0],
-        req.user!.family_id
-      ) as { color: string } | undefined;
+    // Member selection determines full event-card background colour
+    let finalColor = color || null;
+    if (assigned_member_ids && Array.isArray(assigned_member_ids) && assigned_member_ids.length > 0) {
+      const memberRow = db.prepare('SELECT color FROM family_members WHERE id = ?').get(assigned_member_ids[0]) as any;
       if (memberRow?.color) {
         finalColor = memberRow.color;
       }
     }
 
-    const eventTypeValue = event_type !== undefined 
-      ? (typeof event_type === 'string' && event_type.trim() ? event_type.trim() : 'Other')
-      : (existing.event_type || 'Other');
-
-    const targetGoogle = resolveGoogleCalendarForEvent(req.user!.family_id, targetCalId, effectiveMembers);
-    const syncStatus = targetGoogle ? 'pending' : (cal?.source === 'google' ? 'pending' : existing.sync_status);
+    const finalEventType = event_type !== undefined ? (event_type?.trim() || 'Other') : null;
 
     db.prepare(`
       UPDATE events
@@ -1247,8 +1359,8 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
           title = COALESCE(?, title),
           description = ?,
           location = ?,
-          color = ?,
-          event_type = ?,
+          color = COALESCE(?, color),
+          event_type = COALESCE(?, event_type),
           start_time = COALESCE(?, start_time),
           end_time = COALESCE(?, end_time),
           all_day = ?,
@@ -1264,7 +1376,7 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
       description !== undefined ? description : existing.description,
       location !== undefined ? location : existing.location,
       finalColor,
-      eventTypeValue,
+      finalEventType,
       start_time || null,
       end_time || null,
       all_day !== undefined ? (all_day ? 1 : 0) : existing.all_day,
@@ -1286,7 +1398,7 @@ router.put('/events/:id', authenticateToken, async (req: AuthRequest, res: Respo
 
     res.json({
       ...updated,
-      event_type: updated.event_type || eventTypeValue,
+      event_type: updated.event_type || 'Other',
       all_day: Boolean(updated.all_day),
       assigned_member_ids: JSON.parse(updated.assigned_member_ids || '[]'),
     });
@@ -1345,125 +1457,6 @@ router.delete('/events/:id', authenticateToken, (req: AuthRequest, res: Response
         googleEventId: existing.google_event_id,
       });
     }
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================================
-// 4B. EVENT TYPES (Preassigned Colours & Admin Management)
-// ==========================================
-
-router.get('/event-types', authenticateToken, (req: AuthRequest, res: Response) => {
-  try {
-    const types = db.prepare(`
-      SELECT * FROM event_types
-      WHERE family_id = ?
-      ORDER BY is_default DESC, name ASC
-    `).all(req.user!.family_id);
-
-    res.json(types);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/event-types', authenticateToken, (req: AuthRequest, res: Response) => {
-  try {
-    const isAdmin = req.user!.role === 'administrator';
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Only administrators can create event types.' });
-    }
-
-    const { name, color, icon } = req.body;
-    if (!name || !color) {
-      return res.status(400).json({ error: 'Name and colour are required.' });
-    }
-
-    const now = new Date().toISOString();
-    const id = 'type_' + uuidv4().slice(0, 8);
-
-    db.prepare(`
-      INSERT INTO event_types (id, family_id, name, color, icon, is_default, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-    `).run(id, req.user!.family_id, name.trim(), color.trim(), icon || '📌', now, now);
-
-    const created = db.prepare('SELECT * FROM event_types WHERE id = ?').get(id);
-    res.status(201).json(created);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put('/event-types/:id', authenticateToken, (req: AuthRequest, res: Response) => {
-  try {
-    const isAdmin = req.user!.role === 'administrator';
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Only administrators can edit event types.' });
-    }
-
-    const { id } = req.params;
-    const { name, color, icon } = req.body;
-
-    const existing = db.prepare('SELECT * FROM event_types WHERE id = ? AND family_id = ?').get(
-      id,
-      req.user!.family_id
-    ) as any;
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Event type not found.' });
-    }
-
-    const now = new Date().toISOString();
-    db.prepare(`
-      UPDATE event_types
-      SET name = COALESCE(?, name),
-          color = COALESCE(?, color),
-          icon = COALESCE(?, icon),
-          updated_at = ?
-      WHERE id = ? AND family_id = ?
-    `).run(
-      name ? name.trim() : null,
-      color ? color.trim() : null,
-      icon !== undefined ? icon : null,
-      now,
-      id,
-      req.user!.family_id
-    );
-
-    const updated = db.prepare('SELECT * FROM event_types WHERE id = ?').get(id);
-    res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/event-types/:id', authenticateToken, (req: AuthRequest, res: Response) => {
-  try {
-    const isAdmin = req.user!.role === 'administrator';
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Only administrators can delete event types.' });
-    }
-
-    const { id } = req.params;
-    const existing = db.prepare('SELECT * FROM event_types WHERE id = ? AND family_id = ?').get(
-      id,
-      req.user!.family_id
-    ) as any;
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Event type not found.' });
-    }
-
-    // If events were using this type, migrate them to 'Other'
-    db.prepare('UPDATE events SET event_type = ? WHERE family_id = ? AND event_type = ?').run(
-      'Other',
-      req.user!.family_id,
-      existing.name
-    );
-
-    db.prepare('DELETE FROM event_types WHERE id = ? AND family_id = ?').run(id, req.user!.family_id);
-    res.json({ success: true, message: 'Event type deleted and associated events moved to Other.' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

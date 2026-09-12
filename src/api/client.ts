@@ -4,6 +4,7 @@ import {
   FamilyMember,
   Calendar,
   CalendarEvent,
+  EventType,
   Task,
   BirthdayItem,
   GoogleConfigResponse,
@@ -178,23 +179,23 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // Event Types
-  getEventTypes: () => fetchJson<import('../types').EventTypeDefinition[]>('/api/event-types'),
+  // Event Types & Preassigned Badge Colours
+  getEventTypes: () => fetchJson<EventType[]>('/api/event-types'),
 
   createEventType: (data: { name: string; color: string; icon?: string }) =>
-    fetchJson<import('../types').EventTypeDefinition>('/api/event-types', {
+    fetchJson<EventType>('/api/event-types', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateEventType: (id: string, data: { name?: string; color?: string; icon?: string }) =>
-    fetchJson<import('../types').EventTypeDefinition>(`/api/event-types/${id}`, {
+  updateEventType: (id: string, data: Partial<EventType>) =>
+    fetchJson<EventType>(`/api/event-types/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   deleteEventType: (id: string) =>
-    fetchJson<{ success: boolean; message: string }>(`/api/event-types/${id}`, {
+    fetchJson<{ success: boolean; message?: string }>(`/api/event-types/${id}`, {
       method: 'DELETE',
     }),
 

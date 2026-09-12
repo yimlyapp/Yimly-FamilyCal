@@ -1,100 +1,86 @@
 import React from 'react';
 import { Check } from 'lucide-react';
-import { EventTypeDefinition } from '../types';
+import { FamilyMember, CalendarEvent } from '../types';
 
 export interface EventTypeInfo {
+  id?: string;
   name: string;
   bgHex: string;
   textHex: string;
   icon: string;
 }
 
-export const DEFAULT_EVENT_TYPES: EventTypeDefinition[] = [
-  { id: 'school', name: 'School', color: '#EAB308', icon: '🎓' },
-  { id: 'sport', name: 'Sport', color: '#3B82F6', icon: '⚽' },
-  { id: 'appointment', name: 'Appointment', color: '#22C55E', icon: '🩺' },
-  { id: 'work', name: 'Work', color: '#F97316', icon: '💼' },
-  { id: 'birthday', name: 'Birthday', color: '#EC4899', icon: '🎁' },
-  { id: 'holiday', name: 'Holiday', color: '#8B5CF6', icon: '🏖️' },
-  { id: 'social', name: 'Social', color: '#C084FC', icon: '🍸' },
-  { id: 'important', name: 'Important', color: '#EF4444', icon: '⚡' },
-  { id: 'other', name: 'Other', color: '#64748B', icon: '📌' },
+export const PREDEFINED_EVENT_TYPES: EventTypeInfo[] = [
+  { id: 'school', name: 'School', bgHex: '#EAB308', textHex: '#FFFFFF', icon: '🎓' },
+  { id: 'sport', name: 'Sport', bgHex: '#3B82F6', textHex: '#FFFFFF', icon: '⚽' },
+  { id: 'appointment', name: 'Appointment', bgHex: '#10B981', textHex: '#FFFFFF', icon: '🩺' },
+  { id: 'work', name: 'Work', bgHex: '#F97316', textHex: '#FFFFFF', icon: '💼' },
+  { id: 'birthday', name: 'Birthday', bgHex: '#EC4899', textHex: '#FFFFFF', icon: '🎁' },
+  { id: 'holiday', name: 'Holiday', bgHex: '#8B5CF6', textHex: '#FFFFFF', icon: '🏖️' },
+  { id: 'social', name: 'Social', bgHex: '#C084FC', textHex: '#FFFFFF', icon: '🍸' },
+  { id: 'important', name: 'Important', bgHex: '#EF4444', textHex: '#FFFFFF', icon: '⚡' },
+  { id: 'other', name: 'Other', bgHex: '#64748B', textHex: '#FFFFFF', icon: '⭐' },
 ];
 
 export function getEventTypeInfo(
   title?: string,
   explicitType?: string,
-  customTypes?: EventTypeDefinition[]
+  customTypes?: Array<{ id?: string; name: string; color: string; icon?: string }>
 ): EventTypeInfo {
-  const allTypes = customTypes && customTypes.length > 0 ? customTypes : DEFAULT_EVENT_TYPES;
-
-  // 1. If explicitType is given, find direct match
-  if (explicitType && explicitType.trim()) {
-    const trimmed = explicitType.trim();
-    const matched = allTypes.find(
-      (t) => t.name.toLowerCase() === trimmed.toLowerCase() || t.id.toLowerCase() === trimmed.toLowerCase()
+  // 1. If explicitType is provided and customTypes exist, match against customTypes first
+  if (explicitType && customTypes && customTypes.length > 0) {
+    const matchedCustom = customTypes.find(
+      (ct) => ct.name.toLowerCase() === explicitType.toLowerCase() || ct.id === explicitType
     );
-    if (matched) {
+    if (matchedCustom) {
       return {
-        name: matched.name,
-        bgHex: matched.color,
+        id: matchedCustom.id,
+        name: matchedCustom.name,
+        bgHex: matchedCustom.color,
         textHex: '#FFFFFF',
-        icon: matched.icon || '📌',
+        icon: matchedCustom.icon || '⭐',
       };
     }
-    // Return explicit type even if not in default list with grey fallback
-    return {
-      name: trimmed,
-      bgHex: '#64748B',
-      textHex: '#FFFFFF',
-      icon: '📌',
-    };
   }
 
-  // 2. Keyword fallback matching from event title
+  // 2. If explicitType is provided, match against predefined event types
+  if (explicitType) {
+    const matched = PREDEFINED_EVENT_TYPES.find(
+      (dt) => dt.name.toLowerCase() === explicitType.toLowerCase() || dt.id === explicitType.toLowerCase()
+    );
+    if (matched) return matched;
+  }
+
+  // 3. Keyword matching for backwards compatibility / smart inference with existing events
   const t = (title || '').toLowerCase();
-  
   if (t.includes('school') || t.includes('excursion') || t.includes('class') || t.includes('homework') || t.includes('exam')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'school');
-    return { name: 'School', bgHex: matched?.color || '#EAB308', textHex: '#FFFFFF', icon: matched?.icon || '🎓' };
+    return PREDEFINED_EVENT_TYPES[0]; // School (Yellow)
   }
-  if (t.includes('sport') || t.includes('football') || t.includes('basketball') || t.includes('match') || t.includes('training') || t.includes('soccer') || t.includes('tennis') || t.includes('dance') || t.includes('gym')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'sport');
-    return { name: 'Sport', bgHex: matched?.color || '#3B82F6', textHex: '#FFFFFF', icon: matched?.icon || '⚽' };
+  if (t.includes('sport') || t.includes('football') || t.includes('basketball') || t.includes('match') || t.includes('training') || t.includes('soccer') || t.includes('tennis') || t.includes('dance') || t.includes('swim')) {
+    if (t.includes('dance')) return { ...PREDEFINED_EVENT_TYPES[1], icon: '🎵' };
+    return PREDEFINED_EVENT_TYPES[1]; // Sport (Blue)
   }
-  if (t.includes('doctor') || t.includes('appointment') || t.includes('dentist') || t.includes('clinic') || t.includes('hospital')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'appointment');
-    return { name: 'Appointment', bgHex: matched?.color || '#22C55E', textHex: '#FFFFFF', icon: matched?.icon || '🩺' };
+  if (t.includes('doctor') || t.includes('appointment') || t.includes('dentist') || t.includes('clinic') || t.includes('checkup')) {
+    return PREDEFINED_EVENT_TYPES[2]; // Appointment (Green)
   }
-  if (t.includes('work') || t.includes('meeting') || t.includes('client') || t.includes('office')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'work');
-    return { name: 'Work', bgHex: matched?.color || '#F97316', textHex: '#FFFFFF', icon: matched?.icon || '💼' };
+  if (t.includes('work') || t.includes('meeting') || t.includes('client') || t.includes('presentation')) {
+    return PREDEFINED_EVENT_TYPES[3]; // Work (Orange)
   }
   if (t.includes('birthday') || t.includes('party')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'birthday');
-    return { name: 'Birthday', bgHex: matched?.color || '#EC4899', textHex: '#FFFFFF', icon: matched?.icon || '🎁' };
+    return PREDEFINED_EVENT_TYPES[4]; // Birthday (Pink)
   }
-  if (t.includes('holiday') || t.includes('trip') || t.includes('fishing') || t.includes('vacation') || t.includes('flight')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'holiday');
-    return { name: 'Holiday', bgHex: matched?.color || '#8B5CF6', textHex: '#FFFFFF', icon: matched?.icon || '🏖️' };
+  if (t.includes('holiday') || t.includes('trip') || t.includes('fishing') || t.includes('vacation') || t.includes('camp')) {
+    return PREDEFINED_EVENT_TYPES[5]; // Holiday (Purple)
   }
-  if (t.includes('social') || t.includes('lunch') || t.includes('dinner') || t.includes('gaming') || t.includes('friends') || t.includes('family time')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'social');
-    return { name: 'Social', bgHex: matched?.color || '#C084FC', textHex: '#FFFFFF', icon: matched?.icon || '🍸' };
+  if (t.includes('social') || t.includes('lunch') || t.includes('gaming') || t.includes('friends') || t.includes('dinner') || t.includes('family time')) {
+    return PREDEFINED_EVENT_TYPES[6]; // Social (Lilac)
   }
-  if (t.includes('important') || t.includes('urgent') || t.includes('deadline')) {
-    const matched = allTypes.find((item) => item.name.toLowerCase() === 'important');
-    return { name: 'Important', bgHex: matched?.color || '#EF4444', textHex: '#FFFFFF', icon: matched?.icon || '⚡' };
+  if (t.includes('important') || t.includes('urgent') || t.includes('tax') || t.includes('deadline')) {
+    return PREDEFINED_EVENT_TYPES[7]; // Important (Red)
   }
 
-  // 3. Default fallback is 'Other'
-  const otherMatched = allTypes.find((item) => item.name.toLowerCase() === 'other');
-  return {
-    name: otherMatched?.name || 'Other',
-    bgHex: otherMatched?.color || '#64748B',
-    textHex: '#FFFFFF',
-    icon: otherMatched?.icon || '📌',
-  };
+  // Default: Other (Grey)
+  return PREDEFINED_EVENT_TYPES[8];
 }
 
 export interface PastelColor {
@@ -287,6 +273,128 @@ export function getPastelColorInfo(colorStr?: string | null): PastelColor {
     borderHex: '#CBD5E1',
     dotHex: colorStr,
     bgSoft: colorStr,
+  };
+}
+
+export interface EventAssignmentInfo {
+  isFamilyEvent: boolean;
+  label: string;
+  participatingMembers: FamilyMember[];
+  adminMember: FamilyMember;
+  adminColorInfo: PastelColor;
+  primaryColorInfo: PastelColor;
+  borderHex: string;
+  segmentedGradient: string;
+  singleMember: FamilyMember | null;
+}
+
+/**
+ * Creates equal-width vertical segments gradient from an array of pastel hex colors.
+ * Example for 4 colors:
+ * linear-gradient(to right, #F8BBD0 0.00%, #F8BBD0 25.00%, #C5E2F7 25.00%, #C5E2F7 50.00%, #E1D4F9 50.00%, #E1D4F9 75.00%, #BFE8D0 75.00%, #BFE8D0 100.00%)
+ */
+export function getFamilyGradient(colors: string[]): string {
+  if (!colors || colors.length === 0) return '#F8BBD0';
+  if (colors.length === 1) return colors[0];
+
+  const count = colors.length;
+  const stops = colors.map((hex, i) => {
+    const startPct = ((i / count) * 100).toFixed(2);
+    const endPct = (((i + 1) / count) * 100).toFixed(2);
+    return `${hex} ${startPct}%, ${hex} ${endPct}%`;
+  });
+
+  return `linear-gradient(to right, ${stops.join(', ')})`;
+}
+
+/**
+ * Resolves event assignment info:
+ * - If assigned to 1 member: Individual event (member colour = entire card background).
+ * - If assigned to multiple members or whole family: Family event (divided multi-colour background, Family label, admin colour reference).
+ */
+export function getEventAssignmentInfo(
+  evt: Partial<CalendarEvent>,
+  allMembers: FamilyMember[]
+): EventAssignmentInfo {
+  const adminMember =
+    allMembers.find((m) => m.role === 'administrator') ||
+    allMembers[0] || {
+      id: 'admin',
+      family_id: '',
+      name: 'Family',
+      role: 'administrator' as const,
+      color: '#F8BBD0',
+      is_active: 1,
+    };
+  const adminColorInfo = getPastelColorInfo(adminMember?.color || '#F8BBD0');
+
+  // Parse assigned_member_ids
+  let rawIds = evt.assigned_member_ids;
+  let assignedIds: string[] = [];
+  if (Array.isArray(rawIds)) {
+    assignedIds = rawIds;
+  } else if (typeof rawIds === 'string') {
+    try {
+      assignedIds = JSON.parse(rawIds);
+    } catch {
+      assignedIds = [];
+    }
+  }
+
+  // Filter members that actually exist in the family
+  let participatingMembers: FamilyMember[] = allMembers.filter((m) =>
+    assignedIds.includes(m.id)
+  );
+
+  // If no assigned member IDs provided (or empty array / whole family event):
+  if (participatingMembers.length === 0) {
+    if ((evt as any).member_id) {
+      const singleM = allMembers.find((m) => m.id === (evt as any).member_id);
+      if (singleM) {
+        participatingMembers = [singleM];
+      }
+    }
+    // If still empty, it represents the whole family!
+    if (participatingMembers.length === 0) {
+      participatingMembers = [...allMembers];
+    }
+  }
+
+  const isFamilyEvent = participatingMembers.length > 1;
+
+  if (!isFamilyEvent) {
+    const singleMember = participatingMembers[0] || adminMember;
+    const memberColor = singleMember?.color || evt.member_color || evt.color;
+    const colorInfo = getPastelColorInfo(memberColor);
+
+    return {
+      isFamilyEvent: false,
+      label: singleMember?.name || 'Family',
+      singleMember,
+      participatingMembers: singleMember ? [singleMember] : [],
+      adminMember,
+      adminColorInfo,
+      primaryColorInfo: colorInfo,
+      borderHex: colorInfo.borderHex,
+      segmentedGradient: colorInfo.hex,
+    };
+  }
+
+  // Family event:
+  // Multi-colour background divided into equal sections based on number of participating members
+  const memberHexList = participatingMembers.map((m) => getPastelColorInfo(m.color).hex);
+  const segmentedGradient = getFamilyGradient(memberHexList);
+
+  return {
+    isFamilyEvent: true,
+    label: 'Family',
+    singleMember: null,
+    participatingMembers,
+    adminMember,
+    adminColorInfo,
+    primaryColorInfo: adminColorInfo, // Admin's colour is main family reference
+    borderHex: adminColorInfo.borderHex,
+    segmentedGradient,
   };
 }
 

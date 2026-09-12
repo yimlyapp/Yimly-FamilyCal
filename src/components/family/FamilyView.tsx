@@ -31,6 +31,7 @@ import {
   Eye,
   EyeOff,
   Sliders,
+  Settings,
 } from 'lucide-react';
 import { PastelColorPicker, getPastelColorInfo } from '../../utils/colors';
 
@@ -390,7 +391,12 @@ export const FamilyView: React.FC = () => {
               key={member.id}
               id={`member-card-${member.id}`}
               style={{ backgroundColor: colorInfo.bgSoft, borderColor: colorInfo.borderHex }}
-              className="p-5 rounded-3xl border shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
+              onClick={() => {
+                if (canEditThisMember) openEditModal(member);
+              }}
+              className={`p-5 rounded-3xl border shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all ${
+                canEditThisMember ? 'cursor-pointer' : ''
+              }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -423,10 +429,13 @@ export const FamilyView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   {isAdmin && (
                     <button
-                      onClick={() => openPermissionsModal(member)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openPermissionsModal(member);
+                      }}
                       className="p-1.5 rounded-xl hover:bg-black/5 text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
                       title="Manage Permissions"
                       id={`manage-perms-btn-${member.id}`}
@@ -436,7 +445,10 @@ export const FamilyView: React.FC = () => {
                   )}
                   {isAdmin && (
                     <button
-                      onClick={() => openLoginModal(member)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openLoginModal(member);
+                      }}
                       className="p-1.5 rounded-xl hover:bg-black/5 text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
                       title="Manage Member Login"
                       id={`manage-login-btn-${member.id}`}
@@ -446,16 +458,24 @@ export const FamilyView: React.FC = () => {
                   )}
                   {canEditThisMember && (
                     <button
-                      onClick={() => openEditModal(member)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(member);
+                      }}
                       className="p-1.5 rounded-xl hover:bg-black/5 text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
-                      title="Edit Member"
+                      title="Settings"
+                      aria-label="Settings"
+                      id={`member-settings-btn-${member.id}`}
                     >
-                      <Edit2 className="w-4 h-4" />
+                      <Settings className="w-4 h-4" />
                     </button>
                   )}
                   {members.length > 1 && !isCurrentUser && isAdmin && (
                     <button
-                      onClick={() => handleDeleteMember(member.id, member.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteMember(member.id, member.name);
+                      }}
                       className="p-1.5 rounded-xl hover:bg-red-100 text-gray-500 hover:text-red-700 transition-colors cursor-pointer"
                       title="Remove Member"
                     >
@@ -508,151 +528,212 @@ export const FamilyView: React.FC = () => {
         })}
       </div>
 
-      {/* Member Edit / Add Modal */}
+      {/* Member Settings / Edit Modal */}
       {isMemberModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
-              <h3 className="text-base font-bold text-gray-900 font-serif">
-                {editingMember ? 'Edit Family Member' : 'Add Family Member'}
-              </h3>
+        <div
+          id="member-settings-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs overflow-y-auto overflow-x-hidden"
+          style={{
+            paddingTop: 'max(env(safe-area-inset-top, 0px) + 20px, 28px)',
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 20px, 28px)',
+            paddingLeft: 'max(env(safe-area-inset-left, 0px) + 12px, 12px)',
+            paddingRight: 'max(env(safe-area-inset-right, 0px) + 12px, 12px)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsMemberModalOpen(false);
+          }}
+        >
+          <div
+            id="member-settings-dialog"
+            className="relative bg-white border border-gray-200 rounded-3xl w-full max-w-md shadow-2xl animate-in fade-in sm:zoom-in-95 flex flex-col max-h-[calc(100dvh-max(env(safe-area-inset-top,0px)+env(safe-area-inset-bottom,0px)+3rem,4rem))] my-auto overflow-hidden"
+          >
+            {/* Modal Header (Fixed at top of modal, never clipped) */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 shrink-0 bg-white rounded-t-3xl">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs shrink-0"
+                  style={{
+                    backgroundColor: getPastelColorInfo(memberColor).hex,
+                    color: getPastelColorInfo(memberColor).textHex,
+                    borderColor: getPastelColorInfo(memberColor).borderHex,
+                  }}
+                >
+                  {memberName.trim()
+                    ? memberName.trim().slice(0, 1).toUpperCase()
+                    : editingMember
+                    ? editingMember.name.slice(0, 1).toUpperCase()
+                    : 'M'}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-gray-900 font-serif truncate">
+                    {editingMember ? 'Member Settings' : 'Add Family Member'}
+                  </h3>
+                  {editingMember && (
+                    <p className="text-[11px] text-gray-500 truncate">
+                      {editingMember.name} • <span className="capitalize">{editingMember.role}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
               <button
+                id="close-member-settings-btn"
+                type="button"
                 onClick={() => setIsMemberModalOpen(false)}
-                className="p-1 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer shrink-0"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleMemberSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={memberName}
-                  onChange={(e) => {
-                    setMemberName(e.target.value);
-                    if (!newMemberUsername) {
-                      setNewMemberUsername(e.target.value.trim().split(' ')[0] || '');
-                    }
-                  }}
-                  placeholder="e.g. Robin, Sophie, Leo..."
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Family Role
-                </label>
-                <select
-                  value={memberRole}
-                  onChange={(e) => setMemberRole(e.target.value as UserRole)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900 font-medium"
-                >
-                  <option value="adult">Adult</option>
-                  <option value="administrator">Administrator</option>
-                  <option value="child">Child</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                  <Palette className="w-3.5 h-3.5 text-gray-500" /> Member Pastel Color
-                </label>
-                <PastelColorPicker selectedColor={memberColor} onSelectColor={setMemberColor} />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-gray-500" /> Birthday (Optional)
-                </label>
-                <input
-                  type="date"
-                  value={memberBirthday}
-                  onChange={(e) => setMemberBirthday(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900"
-                />
-              </div>
-
-              {/* Administrator option to create login for new member */}
-              {!editingMember && isAdmin && (
-                <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-800 flex items-center gap-1.5 cursor-pointer">
-                      <Key className="w-3.5 h-3.5 text-[#DB2777]" />
-                      <span>Create Member Login Account</span>
-                    </label>
-                    <input
-                      type="checkbox"
-                      id="new-member-login-checkbox"
-                      checked={newMemberCreateLogin}
-                      onChange={(e) => {
-                        setNewMemberCreateLogin(e.target.checked);
-                        if (e.target.checked && !newMemberUsername) {
-                          setNewMemberUsername(memberName.trim().split(' ')[0] || memberName.trim());
-                        }
-                      }}
-                      className="w-4 h-4 rounded text-gray-900 focus:ring-gray-900 cursor-pointer"
-                    />
+            <form
+              onSubmit={handleMemberSubmit}
+              className="flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
+              {/* Scrollable Form Body */}
+              <div
+                className="flex-1 overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-4 space-y-4"
+                style={{
+                  overscrollBehavior: 'contain',
+                  WebkitOverflowScrolling: 'touch',
+                  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+                }}
+              >
+                {error && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                    {error}
                   </div>
+                )}
 
-                  {newMemberCreateLogin && (
-                    <div className="space-y-2.5 pt-1">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                          Username (e.g. Dad, Mum, Kid) *
-                        </label>
-                        <input
-                          type="text"
-                          required={newMemberCreateLogin}
-                          value={newMemberUsername}
-                          onChange={(e) => setNewMemberUsername(e.target.value)}
-                          placeholder="e.g. Dad"
-                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                          Password (min 4 characters) *
-                        </label>
-                        <input
-                          type="password"
-                          required={newMemberCreateLogin}
-                          value={newMemberPassword}
-                          onChange={(e) => setNewMemberPassword(e.target.value)}
-                          placeholder="Set login password"
-                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
-                        />
-                      </div>
-                    </div>
-                  )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={memberName}
+                    onChange={(e) => {
+                      setMemberName(e.target.value);
+                      if (!newMemberUsername) {
+                        setNewMemberUsername(e.target.value.trim().split(' ')[0] || '');
+                      }
+                    }}
+                    placeholder="e.g. Robin, Sophie, Leo..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
+                  />
                 </div>
-              )}
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Family Role
+                  </label>
+                  <select
+                    value={memberRole}
+                    onChange={(e) => setMemberRole(e.target.value as UserRole)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900 font-medium"
+                  >
+                    <option value="adult">Adult</option>
+                    <option value="administrator">Administrator</option>
+                    <option value="child">Child</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                    <Palette className="w-3.5 h-3.5 text-gray-500" /> Member Pastel Color
+                  </label>
+                  <PastelColorPicker selectedColor={memberColor} onSelectColor={setMemberColor} />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-gray-500" /> Birthday (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={memberBirthday}
+                    onChange={(e) => setMemberBirthday(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900"
+                  />
+                </div>
+
+                {/* Administrator option to create login for new member */}
+                {!editingMember && isAdmin && (
+                  <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-gray-800 flex items-center gap-1.5 cursor-pointer">
+                        <Key className="w-3.5 h-3.5 text-[#DB2777]" />
+                        <span>Create Member Login Account</span>
+                      </label>
+                      <input
+                        type="checkbox"
+                        id="new-member-login-checkbox"
+                        checked={newMemberCreateLogin}
+                        onChange={(e) => {
+                          setNewMemberCreateLogin(e.target.checked);
+                          if (e.target.checked && !newMemberUsername) {
+                            setNewMemberUsername(memberName.trim().split(' ')[0] || memberName.trim());
+                          }
+                        }}
+                        className="w-4 h-4 rounded text-gray-900 focus:ring-gray-900 cursor-pointer"
+                      />
+                    </div>
+
+                    {newMemberCreateLogin && (
+                      <div className="space-y-2.5 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                            Username (e.g. Dad, Mum, Kid) *
+                          </label>
+                          <input
+                            type="text"
+                            required={newMemberCreateLogin}
+                            value={newMemberUsername}
+                            onChange={(e) => setNewMemberUsername(e.target.value)}
+                            placeholder="e.g. Dad"
+                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                            Password (min 4 characters) *
+                          </label>
+                          <input
+                            type="password"
+                            required={newMemberCreateLogin}
+                            value={newMemberPassword}
+                            onChange={(e) => setNewMemberPassword(e.target.value)}
+                            placeholder="Set login password"
+                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Fixed Modal Footer */}
+              <div
+                className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-gray-100 bg-gray-50/90 backdrop-blur-xs flex items-center justify-end gap-2.5"
+                style={{
+                  paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setIsMemberModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
                 >
-                  {isSubmitting ? 'Saving...' : editingMember ? 'Update Member' : 'Add Member'}
+                  {isSubmitting ? 'Saving...' : editingMember ? 'Save Settings' : 'Add Member'}
                 </button>
               </div>
             </form>
@@ -662,12 +743,28 @@ export const FamilyView: React.FC = () => {
 
       {/* Admin Manage Permissions Modal */}
       {permModalMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in-95 my-8">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
+        <div
+          id="member-permissions-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs overflow-y-auto overflow-x-hidden"
+          style={{
+            paddingTop: 'max(env(safe-area-inset-top, 0px) + 20px, 28px)',
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 20px, 28px)',
+            paddingLeft: 'max(env(safe-area-inset-left, 0px) + 12px, 12px)',
+            paddingRight: 'max(env(safe-area-inset-right, 0px) + 12px, 12px)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPermModalMember(null);
+          }}
+        >
+          <div
+            id="member-permissions-dialog"
+            className="relative bg-white border border-gray-200 rounded-3xl w-full max-w-lg shadow-2xl animate-in fade-in sm:zoom-in-95 flex flex-col max-h-[calc(100dvh-max(env(safe-area-inset-top,0px)+env(safe-area-inset-bottom,0px)+3rem,4rem))] my-auto overflow-hidden"
+          >
+            {/* Fixed Modal Header */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 shrink-0 bg-white rounded-t-3xl">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs shrink-0"
                   style={{
                     backgroundColor: getPastelColorInfo(permModalMember.color).hex,
                     color: getPastelColorInfo(permModalMember.color).textHex,
@@ -676,126 +773,148 @@ export const FamilyView: React.FC = () => {
                 >
                   {permModalMember.name.slice(0, 1).toUpperCase()}
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-1.5 font-serif">
-                    <Sliders className="w-4 h-4 text-gray-700" />
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-1.5 font-serif truncate">
+                    <Sliders className="w-4 h-4 text-gray-700 shrink-0" />
                     Member Permissions
                   </h3>
-                  <p className="text-[11px] text-gray-500">
+                  <p className="text-[11px] text-gray-500 truncate">
                     {permModalMember.name} • <span className="capitalize">{permModalMember.role}</span>
                   </p>
                 </div>
               </div>
               <button
+                id="close-member-permissions-btn"
+                type="button"
                 onClick={() => setPermModalMember(null)}
-                className="p-1 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer shrink-0"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {permError && (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{permError}</span>
-              </div>
-            )}
-
-            {permSuccess && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{permSuccess}</span>
-              </div>
-            )}
-
-            {/* Role Presets */}
-            <div className="mb-4 p-3 rounded-2xl bg-gray-50 border border-gray-200 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-gray-600 font-semibold">Quick Presets:</span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleResetPermissions('adult')}
-                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-[11px] font-semibold text-emerald-800 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
-                >
-                  Adult Defaults
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleResetPermissions('child')}
-                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-[11px] font-semibold text-cyan-800 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
-                >
-                  Child Defaults
-                </button>
-                {permModalMember.role === 'administrator' && (
-                  <button
-                    type="button"
-                    onClick={() => handleResetPermissions('admin')}
-                    className="px-2.5 py-1 rounded-lg bg-gray-900 text-white hover:bg-gray-800 text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
-                  >
-                    Full Admin
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <form onSubmit={handlePermissionsSubmit} className="space-y-4">
-              {/* Categorized Permissions */}
-              {(['calendars', 'events', 'family', 'google'] as const).map((cat) => {
-                const catDefs = PERMISSION_DEFINITIONS.filter((d) => d.category === cat);
-                const catTitles: Record<string, string> = {
-                  calendars: 'Calendar Management',
-                  events: 'Events & Schedule',
-                  family: 'Family & Household',
-                  google: 'Google Calendar Integrations',
-                };
-
-                return (
-                  <div key={cat} className="space-y-2">
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      {catTitles[cat]}
-                    </h4>
-                    <div className="space-y-1.5 bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                      {catDefs.map((def) => {
-                        const isChecked = Boolean(memberPermissions[def.key]);
-                        return (
-                          <label
-                            key={def.key}
-                            className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white cursor-pointer transition-colors"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => handleTogglePermission(def.key)}
-                              className="mt-0.5 w-4 h-4 rounded text-gray-900 focus:ring-gray-900 cursor-pointer"
-                            />
-                            <div className="flex-1">
-                              <span className="text-xs font-semibold text-gray-900 block">
-                                {def.label}
-                              </span>
-                              <span className="text-[11px] text-gray-500 block leading-tight">
-                                {def.description}
-                              </span>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
+            <form
+              onSubmit={handlePermissionsSubmit}
+              className="flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
+              {/* Scrollable Form Body */}
+              <div
+                className="flex-1 overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-4 space-y-4"
+                style={{
+                  overscrollBehavior: 'contain',
+                  WebkitOverflowScrolling: 'touch',
+                  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+                }}
+              >
+                {permError && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{permError}</span>
                   </div>
-                );
-              })}
+                )}
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                {permSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{permSuccess}</span>
+                  </div>
+                )}
+
+                {/* Role Presets */}
+                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-gray-600 font-semibold">Quick Presets:</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleResetPermissions('adult')}
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-[11px] font-semibold text-emerald-800 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                    >
+                      Adult Defaults
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleResetPermissions('child')}
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-[11px] font-semibold text-cyan-800 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                    >
+                      Child Defaults
+                    </button>
+                    {permModalMember.role === 'administrator' && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetPermissions('admin')}
+                        className="px-2.5 py-1 rounded-lg bg-gray-900 text-white hover:bg-gray-800 text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                      >
+                        Full Admin
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Categorized Permissions */}
+                {(['calendars', 'events', 'family', 'google'] as const).map((cat) => {
+                  const catDefs = PERMISSION_DEFINITIONS.filter((d) => d.category === cat);
+                  const catTitles: Record<string, string> = {
+                    calendars: 'Calendar Management',
+                    events: 'Events & Schedule',
+                    family: 'Family & Household',
+                    google: 'Google Calendar Integrations',
+                  };
+
+                  return (
+                    <div key={cat} className="space-y-2">
+                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        {catTitles[cat]}
+                      </h4>
+                      <div className="space-y-1.5 bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                        {catDefs.map((def) => {
+                          const isChecked = Boolean(memberPermissions[def.key]);
+                          return (
+                            <label
+                              key={def.key}
+                              className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleTogglePermission(def.key)}
+                                className="mt-0.5 w-4 h-4 rounded text-gray-900 focus:ring-gray-900 cursor-pointer"
+                              />
+                              <div className="flex-1">
+                                <span className="text-xs font-semibold text-gray-900 block">
+                                  {def.label}
+                                </span>
+                                <span className="text-[11px] text-gray-500 block leading-tight">
+                                  {def.description}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Fixed Modal Footer */}
+              <div
+                className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-gray-100 bg-gray-50/90 backdrop-blur-xs flex items-center justify-end gap-2.5"
+                style={{
+                  paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setPermModalMember(null)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={permSubmitting}
-                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
                 >
                   {permSubmitting ? 'Saving...' : 'Save Permissions'}
                 </button>
@@ -807,12 +926,28 @@ export const FamilyView: React.FC = () => {
 
       {/* Admin Manage Login Modal */}
       {loginModalMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white border border-gray-200 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
+        <div
+          id="member-login-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs overflow-y-auto overflow-x-hidden"
+          style={{
+            paddingTop: 'max(env(safe-area-inset-top, 0px) + 20px, 28px)',
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px) + 20px, 28px)',
+            paddingLeft: 'max(env(safe-area-inset-left, 0px) + 12px, 12px)',
+            paddingRight: 'max(env(safe-area-inset-right, 0px) + 12px, 12px)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLoginModalMember(null);
+          }}
+        >
+          <div
+            id="member-login-dialog"
+            className="relative bg-white border border-gray-200 rounded-3xl w-full max-w-md shadow-2xl animate-in fade-in sm:zoom-in-95 flex flex-col max-h-[calc(100dvh-max(env(safe-area-inset-top,0px)+env(safe-area-inset-bottom,0px)+3rem,4rem))] my-auto overflow-hidden"
+          >
+            {/* Fixed Modal Header */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 shrink-0 bg-white rounded-t-3xl">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shadow-2xs shrink-0"
                   style={{
                     backgroundColor: getPastelColorInfo(loginModalMember.color).hex,
                     color: getPastelColorInfo(loginModalMember.color).textHex,
@@ -821,140 +956,162 @@ export const FamilyView: React.FC = () => {
                 >
                   {loginModalMember.name.slice(0, 1).toUpperCase()}
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900 font-serif">
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-gray-900 font-serif truncate">
                     Manage Member Login
                   </h3>
-                  <p className="text-[11px] text-gray-500">
+                  <p className="text-[11px] text-gray-500 truncate">
                     {loginModalMember.name} • {loginModalMember.role}
                   </p>
                 </div>
               </div>
               <button
+                id="close-member-login-btn"
+                type="button"
                 onClick={() => setLoginModalMember(null)}
-                className="p-1 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer shrink-0"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {loginError && (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{loginError}</span>
-              </div>
-            )}
+            <form
+              onSubmit={handleLoginSubmit}
+              className="flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
+              {/* Scrollable Form Body */}
+              <div
+                className="flex-1 overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-4 space-y-4"
+                style={{
+                  overscrollBehavior: 'contain',
+                  WebkitOverflowScrolling: 'touch',
+                  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+                }}
+              >
+                {loginError && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
 
-            {loginSuccess && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{loginSuccess}</span>
-              </div>
-            )}
+                {loginSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{loginSuccess}</span>
+                  </div>
+                )}
 
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              {/* Enable / Disable toggle */}
-              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-between">
-                <div>
-                  <label className="text-xs font-semibold text-gray-900 block">
-                    Login Account Enabled
-                  </label>
-                  <p className="text-[11px] text-gray-500">
-                    {loginEnabled
-                      ? 'Member can sign into FamilyCal with their credentials'
-                      : 'Login access is disabled for this member'}
-                  </p>
+                {/* Enable / Disable toggle */}
+                <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-900 block">
+                      Login Account Enabled
+                    </label>
+                    <p className="text-[11px] text-gray-500">
+                      {loginEnabled
+                        ? 'Member can sign into FamilyCal with their credentials'
+                        : 'Login access is disabled for this member'}
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="member-login-enabled-toggle"
+                    checked={loginEnabled}
+                    disabled={loginModalMember.user_id === user?.id}
+                    onChange={(e) => setLoginEnabled(e.target.checked)}
+                    className="w-5 h-5 rounded text-gray-900 focus:ring-gray-900 cursor-pointer disabled:opacity-50"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  id="member-login-enabled-toggle"
-                  checked={loginEnabled}
-                  disabled={loginModalMember.user_id === user?.id}
-                  onChange={(e) => setLoginEnabled(e.target.checked)}
-                  className="w-5 h-5 rounded text-gray-900 focus:ring-gray-900 cursor-pointer disabled:opacity-50"
-                />
+
+                {loginModalMember.user_id === user?.id && (
+                  <p className="text-[11px] text-amber-700 px-1">
+                    Note: This is your active administrator account.
+                  </p>
+                )}
+
+                {loginEnabled && (
+                  <>
+                    {/* Username Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-gray-500" /> Username *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={loginUsername}
+                        onChange={(e) => setLoginUsername(e.target.value)}
+                        placeholder="e.g. Dad, Mum, Kid"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        Used by this family member to sign into FamilyCal.
+                      </p>
+                    </div>
+
+                    {/* Password Field */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5 text-gray-500" />
+                        {loginModalMember.has_login
+                          ? 'Set New Password (optional)'
+                          : 'Initial Password *'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showLoginPassword ? 'text' : 'password'}
+                          required={!loginModalMember.has_login}
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          placeholder={
+                            loginModalMember.has_login
+                              ? 'Leave blank to keep existing password'
+                              : 'Min 4 characters'
+                          }
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 pr-10 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-700 cursor-pointer"
+                        >
+                          {showLoginPassword ? (
+                            <EyeOff className="w-3.5 h-3.5" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {loginModalMember.has_login
+                          ? 'Admin can reset this member’s password at any time.'
+                          : 'Set an initial password for this member.'}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {loginModalMember.user_id === user?.id && (
-                <p className="text-[11px] text-amber-700 px-1">
-                  Note: This is your active administrator account.
-                </p>
-              )}
-
-              {loginEnabled && (
-                <>
-                  {/* Username Field */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                      <User className="w-3.5 h-3.5 text-gray-500" /> Username *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={loginUsername}
-                      onChange={(e) => setLoginUsername(e.target.value)}
-                      placeholder="e.g. Dad, Mum, Kid"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
-                    />
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Used by this family member to sign into FamilyCal.
-                    </p>
-                  </div>
-
-                  {/* Password Field */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-gray-500" />
-                      {loginModalMember.has_login
-                        ? 'Set New Password (optional)'
-                        : 'Initial Password *'}
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showLoginPassword ? 'text' : 'password'}
-                        required={!loginModalMember.has_login}
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder={
-                          loginModalMember.has_login
-                            ? 'Leave blank to keep existing password'
-                            : 'Min 4 characters'
-                        }
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 pr-10 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-700 cursor-pointer"
-                      >
-                        {showLoginPassword ? (
-                          <EyeOff className="w-3.5 h-3.5" />
-                        ) : (
-                          <Eye className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      {loginModalMember.has_login
-                        ? 'Admin can reset this member’s password at any time.'
-                        : 'Set an initial password for this member.'}
-                    </p>
-                  </div>
-                </>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+              {/* Fixed Modal Footer */}
+              <div
+                className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-gray-100 bg-gray-50/90 backdrop-blur-xs flex items-center justify-end gap-2.5"
+                style={{
+                  paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setLoginModalMember(null)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loginSubmitting}
-                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
                 >
                   {loginSubmitting ? 'Saving...' : 'Save Login Settings'}
                 </button>

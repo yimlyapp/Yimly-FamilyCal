@@ -5,11 +5,12 @@ import {
 } from 'date-fns';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
-import { MapPin, Repeat, Globe, Clock, Plus } from 'lucide-react';
-import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
+import { Plus } from 'lucide-react';
+import { EventCard } from './EventCard';
 
 export const DayView: React.FC = () => {
-  const { currentDate, filteredEvents, eventTypes, openCreateEventModal, openEditEventModal } = useCalendar();
+  const { currentDate, filteredEvents, openCreateEventModal, openEditEventModal, eventTypes } =
+    useCalendar();
   const { members } = useFamily();
 
   const dayEvents = filteredEvents.filter((evt) => {
@@ -48,95 +49,16 @@ export const DayView: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">Tap the button above to schedule family activities.</p>
           </div>
         ) : (
-          dayEvents.map((evt) => {
-            const startD = new Date(evt.start_time);
-            const endD = new Date(evt.end_time);
-            const assignedMember = members.find((m) =>
-              evt.assigned_member_ids?.includes(m.id)
-            );
-            const memberColor = assignedMember?.color || evt.member_color || evt.color;
-            const colorInfo = getPastelColorInfo(memberColor);
-            const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
-            const memberName = assignedMember?.name || evt.member_name || 'Family';
-            const isGoogle = evt.google_event_id || evt.calendar_source === 'google';
-
-            return (
-              <div
-                key={evt.id}
-                id={`day-event-card-${evt.id}`}
-                onClick={() => openEditEventModal(evt)}
-                style={{
-                  backgroundColor: colorInfo.hex,
-                  borderColor: colorInfo.borderHex,
-                }}
-                className="p-4 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col gap-2.5 group"
-              >
-                {/* Top Row: Member Avatar & Name + Event Type Badge */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-2xs shrink-0 text-white"
-                      style={{ backgroundColor: colorInfo.dotHex }}
-                    >
-                      {memberName.slice(0, 1).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 tracking-tight">
-                      {memberName}
-                    </span>
-                  </div>
-
-                  {/* Predefined Event Type Badge */}
-                  <div
-                    className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white flex items-center gap-1 shadow-2xs shrink-0"
-                    style={{ backgroundColor: eventType.bgHex }}
-                  >
-                    <span>{eventType.icon}</span>
-                    <span>{eventType.name}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-base font-bold text-slate-900 leading-snug group-hover:text-blue-900 transition-colors">
-                      {evt.title}
-                    </h4>
-                    {evt.recurring_rule !== 'none' && (
-                      <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-black/5 border border-black/10 text-slate-700">
-                        <Repeat className="w-2.5 h-2.5" /> {evt.recurring_rule}
-                      </span>
-                    )}
-                    {isGoogle && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-900">
-                        <Globe className="w-2.5 h-2.5" /> Google
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 opacity-90">
-                    <Clock className="w-3.5 h-3.5 opacity-70" />
-                    <span>
-                      {evt.all_day
-                        ? 'All Day'
-                        : `${format(startD, 'h:mm a')} – ${format(endD, 'h:mm a')}`}
-                    </span>
-                  </div>
-                </div>
-
-                {evt.description && (
-                  <p className="text-xs text-slate-700 opacity-90 line-clamp-2 leading-relaxed">
-                    {evt.description}
-                  </p>
-                )}
-
-                {evt.location && (
-                  <div className="flex items-center gap-1 text-xs text-slate-600 opacity-80 pt-1 border-t border-black/5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>{evt.location}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })
+          dayEvents.map((evt) => (
+            <EventCard
+              key={evt.id}
+              event={evt}
+              members={members}
+              eventTypes={eventTypes}
+              onClick={() => openEditEventModal(evt)}
+              showDetails={true}
+            />
+          ))
         )}
       </div>
     </div>

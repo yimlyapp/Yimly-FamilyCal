@@ -15,8 +15,15 @@ import {
   Users,
   Tag,
   Globe,
+  Check,
+  Sparkles,
 } from 'lucide-react';
-import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
+import {
+  PREDEFINED_EVENT_TYPES,
+  getPastelColorInfo,
+  getEventTypeInfo,
+  getEventAssignmentInfo,
+} from '../../utils/colors';
 
 export const EventModal: React.FC = () => {
   const {
@@ -38,8 +45,7 @@ export const EventModal: React.FC = () => {
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [calendarId, setCalendarId] = useState('');
-  const [selectedMemberId, setSelectedMemberId] = useState('');
-  const [eventType, setEventType] = useState('School');
+  const [eventType, setEventType] = useState('Other');
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [endDate, setEndDate] = useState('');
@@ -54,6 +60,9 @@ export const EventModal: React.FC = () => {
   const canSave = selectedEvent ? canEditEvent(selectedEvent) : (isAdmin || hasPermission('event_create'));
   const canDelete = selectedEvent ? canDeleteEvent(selectedEvent) : false;
 
+  // Available event types (either loaded from database or predefined fallback)
+  const availableEventTypes = eventTypes && eventTypes.length > 0 ? eventTypes : PREDEFINED_EVENT_TYPES;
+
   // Initialize form when modal opens or selectedEvent changes
   useEffect(() => {
     if (!isEventModalOpen) return;
@@ -63,17 +72,11 @@ export const EventModal: React.FC = () => {
       setDescription(selectedEvent.description || '');
       setLocation(selectedEvent.location || '');
       setCalendarId(selectedEvent.calendar_id);
-      
-      const primaryMemberId = selectedEvent.assigned_member_ids?.[0] || '';
-      setSelectedMemberId(primaryMemberId);
-      setAssignedMemberIds(selectedEvent.assigned_member_ids || []);
-
-      const detectedType = selectedEvent.event_type || getEventTypeInfo(selectedEvent.title, undefined, eventTypes).name;
-      setEventType(detectedType || 'School');
-
+      setEventType(selectedEvent.event_type || 'Other');
       setAllDay(Boolean(selectedEvent.all_day));
       setRecurringRule(selectedEvent.recurring_rule || 'none');
       setRecurringUntil(selectedEvent.recurring_until ? selectedEvent.recurring_until.slice(0, 10) : '');
+      setAssignedMemberIds(selectedEvent.assigned_member_ids || []);
 
       const sDate = new Date(selectedEvent.start_time);
       const eDate = new Date(selectedEvent.end_time);
@@ -89,6 +92,7 @@ export const EventModal: React.FC = () => {
       setTitle('');
       setDescription('');
       setLocation('');
+      setEventType('Other');
       setStartDate(sDateStr);
       setEndDate(sDateStr);
       setStartTime(format(baseDate, 'HH:mm') === '00:00' ? '09:00' : format(baseDate, 'HH:mm'));
@@ -96,42 +100,72 @@ export const EventModal: React.FC = () => {
       setAllDay(false);
       setRecurringRule('none');
       setRecurringUntil('');
-      setEventType('School');
 
-      // Default Calendar & Member selection
+      // Default Calendar & Member assignment
       const defaultCal = calendars.find((c) => c.is_default) || calendars[0];
       if (defaultCal) {
         setCalendarId(defaultCal.id);
         if (defaultCal.member_id) {
-          setSelectedMemberId(defaultCal.member_id);
           setAssignedMemberIds([defaultCal.member_id]);
         } else if (members.length > 0) {
-          setSelectedMemberId(members[0].id);
           setAssignedMemberIds([members[0].id]);
         } else {
-          setSelectedMemberId('');
           setAssignedMemberIds([]);
         }
       } else if (members.length > 0) {
-        setSelectedMemberId(members[0].id);
         setAssignedMemberIds([members[0].id]);
       } else {
-        setSelectedMemberId('');
         setAssignedMemberIds([]);
       }
     }
     setError(null);
-  }, [isEventModalOpen, selectedEvent, eventModalInitialDate, calendars, members, eventTypes]);
+  }, [isEventModalOpen, selectedEvent, eventModalInitialDate, calendars, members]);
 
   if (!isEventModalOpen) return null;
 
-  // Selected member automatically determines the card pastel background
-  const selectedMember = members.find((m) => m.id === selectedMemberId) || (members.length > 0 ? members[0] : null);
-  const memberColor = selectedMember?.color || '#F8BBD0';
-  const colorInfo = getPastelColorInfo(memberColor);
+  // Derive assignment info (support single member or Whole Family / multi-member):
+  const previewAssignment = getEventAssignmentInfo(
+    {
+      title,
+      event_type: eventType,
+      assigned_member_ids: assignedMemberIds,
+    },
+    members
+  );
 
-  // Selected event type automatically determines the badge colour
-  const currentTypeInfo = getEventTypeInfo(title, eventType, eventTypes);
+  // Derive the event type info:
+  const currentEventTypeInfo = getEventTypeInfo(title, eventType, availableEventTypes as any);
+
+  const isWholeFamilySelected =
+    assignedMemberIds.length === members.length ||
+    (assignedMemberIds.length === 0 && members.length > 0);
+
+  const handleSelectWholeFamily = () => {
+    setAssignedMemberIds(members.map((m) => m.id));
+  };
+
+  const handleSelectSingleMember = (memberId: string) => {
+    setAssignedMemberIds([memberId]);
+    const matchingCal = calendars.find((c) => c.member_id === memberId);
+    if (matchingCal) {
+      setCalendarId(matchingCal.id);
+    }
+  };
+
+  const toggleMemberAssignment = (memberId: string) => {
+    setAssignedMemberIds((prev) => {
+      if (prev.includes(memberId)) {
+        const updated = prev.filter((id) => id !== memberId);
+        // If unchecking everything, fallback to admin or first member
+        if (updated.length === 0 && members.length > 0) {
+          return [members[0].id];
+        }
+        return updated;
+      } else {
+        return [...prev, memberId];
+      }
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,21 +193,24 @@ export const EventModal: React.FC = () => {
         endIso = new Date(`${endDate || startDate}T${endTime}:00`).toISOString();
       }
 
-      const finalMembers = selectedMemberId ? [selectedMemberId] : assignedMemberIds;
+      // Member colour is used as the full background colour of the event card
+      const finalColor = previewAssignment.isFamilyEvent
+        ? previewAssignment.adminMember?.color || 'blue'
+        : previewAssignment.singleMember?.color || 'blue';
 
       const eventPayload: Partial<CalendarEvent> = {
         title: title.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
-        calendar_id: calendarId,
-        color: memberColor,
+        calendar_id: calendarId || calendars[0]?.id,
+        color: finalColor,
         event_type: eventType,
         start_time: startIso,
         end_time: endIso,
         all_day: allDay,
         recurring_rule: recurringRule,
         recurring_until: recurringUntil ? `${recurringUntil}T23:59:59Z` : null,
-        assigned_member_ids: finalMembers,
+        assigned_member_ids: assignedMemberIds,
       };
 
       if (selectedEvent) {
@@ -225,7 +262,12 @@ export const EventModal: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <div
               className="w-4 h-4 rounded-full shadow-2xs border shrink-0"
-              style={{ backgroundColor: colorInfo.hex, borderColor: colorInfo.borderHex }}
+              style={{
+                background: previewAssignment.isFamilyEvent
+                  ? previewAssignment.segmentedGradient
+                  : previewAssignment.primaryColorInfo.hex,
+                borderColor: previewAssignment.borderHex,
+              }}
             />
             <h3 className="text-base sm:text-lg font-bold text-gray-900 tracking-tight font-serif">
               {selectedEvent ? (canSave ? 'Edit Event' : 'Event Details') : 'New Event'}
@@ -250,48 +292,6 @@ export const EventModal: React.FC = () => {
           </div>
         )}
 
-        {/* Live Preview Card */}
-        <div
-          id="event-preview-card"
-          className="mb-4 p-3.5 rounded-2xl border shadow-2xs flex flex-col gap-2 transition-colors"
-          style={{
-            backgroundColor: colorInfo.hex,
-            borderColor: colorInfo.borderHex,
-          }}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
-                style={{ backgroundColor: colorInfo.dotHex }}
-              >
-                {(selectedMember?.name || 'F').slice(0, 1).toUpperCase()}
-              </div>
-              <span className="text-xs font-bold text-slate-800">
-                {selectedMember?.name || 'Whole Family'}
-              </span>
-            </div>
-
-            <div
-              className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white flex items-center gap-1 shadow-2xs"
-              style={{ backgroundColor: currentTypeInfo.bgHex }}
-            >
-              <span>{currentTypeInfo.icon}</span>
-              <span>{currentTypeInfo.name}</span>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
-              {title.trim() || 'Untitled Event'}
-            </h4>
-            <span className="text-[11px] font-semibold text-slate-600 block mt-0.5">
-              {allDay ? 'All Day' : `${startTime} – ${endTime}`}
-              {location.trim() ? ` • ${location.trim()}` : ''}
-            </span>
-          </div>
-        </div>
-
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title Input */}
@@ -306,98 +306,306 @@ export const EventModal: React.FC = () => {
               disabled={!canSave}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Science Project, Soccer Practice, Dentist..."
+              placeholder="e.g. Football match, Doctor appointment, School camp..."
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900 transition-colors disabled:opacity-70 font-medium"
             />
           </div>
 
-          {/* Family Member & Event Type Select Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* 1. Family Member (Determines background colour) */}
-            <div>
-              <label htmlFor="event-member-select" className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-gray-500" /> Family Member
+          {/* 1. FAMILY MEMBER SELECTOR (Determines full event-card pastel background colour) */}
+          <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-indigo-600" />
+                <span>1. Assign To</span>
               </label>
-              <select
-                id="event-member-select"
-                value={selectedMemberId}
-                disabled={!canSave}
-                onChange={(e) => {
-                  const newMemberId = e.target.value;
-                  setSelectedMemberId(newMemberId);
-                  setAssignedMemberIds(newMemberId ? [newMemberId] : []);
-                  // Auto-align calendar if member has specific calendar
-                  const matchedCal = calendars.find((c) => c.member_id === newMemberId);
-                  if (matchedCal) {
-                    setCalendarId(matchedCal.id);
-                  }
-                }}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-semibold"
-              >
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.role})
-                  </option>
-                ))}
-                <option value="">Whole Family / Shared</option>
-              </select>
-              <p className="text-[11px] text-gray-500 mt-1">
-                Determines full event-card background colour.
-              </p>
+              <span className="text-[11px] font-medium text-gray-500">
+                {previewAssignment.isFamilyEvent
+                  ? 'Family event (divided member colours)'
+                  : 'Individual member colour'}
+              </span>
             </div>
 
-            {/* 2. Event Type (Automatically determines badge colour) */}
-            <div>
-              <label htmlFor="event-type-select" className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
-                <Tag className="w-3.5 h-3.5 text-gray-500" /> Event Type
-              </label>
-              <select
-                id="event-type-select"
-                value={eventType}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
+              {/* Whole Family Option */}
+              <button
+                type="button"
                 disabled={!canSave}
-                onChange={(e) => setEventType(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-semibold"
+                onClick={handleSelectWholeFamily}
+                style={{
+                  background: isWholeFamilySelected
+                    ? previewAssignment.segmentedGradient
+                    : '#FFFFFF',
+                  borderColor: isWholeFamilySelected
+                    ? previewAssignment.adminColorInfo.borderHex
+                    : '#E2E8F0',
+                  color: '#0F172A',
+                }}
+                className={`relative flex items-center gap-2 p-2 rounded-xl text-xs border transition-all cursor-pointer shadow-2xs text-left overflow-hidden ${
+                  isWholeFamilySelected
+                    ? 'font-bold ring-2 ring-indigo-500/40 scale-[1.02]'
+                    : 'hover:border-gray-300 font-medium'
+                } disabled:opacity-70`}
               >
-                {eventTypes.map((t) => (
-                  <option key={t.id || t.name} value={t.name}>
-                    {t.icon ? `${t.icon} ` : ''}{t.name}
-                  </option>
-                ))}
-              </select>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-[11px] text-gray-500">Badge colour:</span>
-                <span
-                  className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white flex items-center gap-1 shadow-2xs"
-                  style={{ backgroundColor: currentTypeInfo.bgHex }}
+                {/* Visual section boundary indicators */}
+                {isWholeFamilySelected && (
+                  <div className="absolute inset-0 flex pointer-events-none rounded-[inherit] overflow-hidden -z-0">
+                    {members.map((m, idx) => (
+                      <div
+                        key={m.id || idx}
+                        className="flex-1 h-full border-r border-black/8 last:border-r-0"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div
+                  className="relative z-10 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-2xs"
+                  style={{ backgroundColor: previewAssignment.adminColorInfo.dotHex }}
                 >
-                  <span>{currentTypeInfo.icon}</span>
-                  <span>{currentTypeInfo.name}</span>
-                </span>
+                  <Users className="w-3 h-3 stroke-[2.5]" />
+                </div>
+                <div className="relative z-10 truncate flex-1 flex flex-col">
+                  <span className="font-extrabold text-slate-900 leading-tight">Whole Family</span>
+                  <span className="text-[9px] text-slate-600 font-semibold leading-tight">
+                    All {members.length} members
+                  </span>
+                </div>
+                {isWholeFamilySelected && (
+                  <Check className="relative z-10 w-3.5 h-3.5 shrink-0 text-slate-900" />
+                )}
+              </button>
+
+              {/* Individual Family Members */}
+              {members.map((m) => {
+                const isSelected =
+                  !isWholeFamilySelected &&
+                  assignedMemberIds.length === 1 &&
+                  assignedMemberIds[0] === m.id;
+                const mColor = getPastelColorInfo(m.color);
+
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    disabled={!canSave}
+                    onClick={() => handleSelectSingleMember(m.id)}
+                    style={{
+                      backgroundColor: isSelected ? mColor.hex : '#FFFFFF',
+                      borderColor: isSelected ? mColor.borderHex : '#E2E8F0',
+                      color: isSelected ? mColor.textHex : '#334155',
+                    }}
+                    className={`flex items-center gap-2 p-2 rounded-xl text-xs border transition-all cursor-pointer shadow-2xs text-left ${
+                      isSelected
+                        ? 'font-bold ring-2 ring-indigo-500/30 scale-[1.02]'
+                        : 'hover:border-gray-300 font-medium'
+                    } disabled:opacity-70`}
+                  >
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-2xs"
+                      style={{ backgroundColor: mColor.dotHex }}
+                    >
+                      {m.name.slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="truncate flex-1">{m.name}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Multi-member toggle for custom subset of family members */}
+            {members.length > 2 && (
+              <div className="pt-1.5 flex items-center gap-2 text-[11px] text-gray-500 border-t border-slate-200/60 mt-2">
+                <span className="shrink-0 font-medium">Customize participating:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {members.map((m) => {
+                    const isChecked = assignedMemberIds.includes(m.id);
+                    const mColor = getPastelColorInfo(m.color);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => toggleMemberAssignment(m.id)}
+                        disabled={!canSave}
+                        style={{
+                          backgroundColor: isChecked ? mColor.hex : '#FFFFFF',
+                          borderColor: isChecked ? mColor.borderHex : '#E2E8F0',
+                        }}
+                        className={`px-2 py-0.5 rounded-full text-[10px] border transition-all cursor-pointer flex items-center gap-1 ${
+                          isChecked
+                            ? 'font-bold text-slate-900 shadow-2xs'
+                            : 'text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: mColor.dotHex }}
+                        />
+                        <span>{m.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* 2. EVENT TYPE SELECTOR (Determines event-type colour badge) */}
+          <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                <span>2. Event Type</span>
+              </label>
+              <span className="text-[11px] font-medium text-gray-500">
+                Preassigned badge colour
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 pt-0.5">
+              {availableEventTypes.map((et) => {
+                const isSelected = eventType.toLowerCase() === et.name.toLowerCase();
+                const badgeColor = et.color || (et as any).bgHex || '#64748B';
+                const badgeIcon = et.icon || '⭐';
+
+                return (
+                  <button
+                    key={et.name}
+                    type="button"
+                    disabled={!canSave}
+                    onClick={() => setEventType(et.name)}
+                    style={{
+                      borderColor: isSelected ? badgeColor : '#E2E8F0',
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs border transition-all cursor-pointer bg-white text-left ${
+                      isSelected
+                        ? 'font-bold ring-2 shadow-xs scale-[1.02]'
+                        : 'hover:border-gray-300 text-gray-700 font-medium'
+                    } disabled:opacity-70`}
+                  >
+                    <span
+                      className="w-5 h-5 rounded-full text-[10px] text-white flex items-center justify-center shrink-0 shadow-2xs"
+                      style={{ backgroundColor: badgeColor }}
+                    >
+                      {badgeIcon}
+                    </span>
+                    <span className="truncate flex-1 text-slate-800">{et.name}</span>
+                    {isSelected && (
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: badgeColor }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Calendar Select */}
-          {calendars.length > 1 && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                <CalIcon className="w-3.5 h-3.5 text-gray-500" /> Calendar
-              </label>
-              <select
-                id="event-calendar-select"
-                value={calendarId}
-                disabled={!canSave}
-                onChange={(e) => setCalendarId(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-medium"
-              >
-                {calendars.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} {c.member_name ? `(${c.member_name})` : ''}
-                  </option>
-                ))}
-              </select>
+          {/* LIVE VISUAL PREVIEW OF EVENT CARD */}
+          <div className="p-3.5 rounded-2xl bg-white border border-gray-200 space-y-1.5 shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 px-0.5">
+              <span className="flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-500" /> Card Appearance Preview
+              </span>
+              <span className="text-[10px] text-gray-400">
+                {previewAssignment.isFamilyEvent
+                  ? 'Divided Family Colours + Event Type Badge'
+                  : 'Member Colour + Event Type Badge'}
+              </span>
             </div>
-          )}
+
+            <div
+              style={{
+                background: previewAssignment.isFamilyEvent
+                  ? previewAssignment.segmentedGradient
+                  : previewAssignment.primaryColorInfo.hex,
+                borderColor: previewAssignment.borderHex,
+              }}
+              className="relative p-3.5 rounded-2xl border shadow-2xs flex flex-col gap-2 transition-all overflow-hidden"
+            >
+              {/* Visible boundary dividers for multi-colour Family event card */}
+              {previewAssignment.isFamilyEvent && (
+                <div className="absolute inset-0 flex pointer-events-none rounded-[inherit] overflow-hidden -z-0">
+                  {previewAssignment.participatingMembers.map((m, idx) => (
+                    <div
+                      key={m.id || idx}
+                      className="flex-1 h-full border-r border-black/8 last:border-r-0"
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {previewAssignment.isFamilyEvent ? (
+                    <>
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
+                        style={{ backgroundColor: previewAssignment.adminColorInfo.dotHex }}
+                        title="Whole Family"
+                      >
+                        <Users className="w-3 h-3 stroke-[2.5]" />
+                      </div>
+                      <span className="text-xs font-extrabold text-slate-900 tracking-tight">
+                        Family
+                      </span>
+                      <div className="flex -space-x-1 items-center ml-0.5">
+                        {previewAssignment.participatingMembers.map((m) => {
+                          const mColor = getPastelColorInfo(m.color);
+                          return (
+                            <span
+                              key={m.id}
+                              title={m.name}
+                              className="w-3.5 h-3.5 rounded-full border border-white/90 shadow-2xs shrink-0 flex items-center justify-center text-[7px] font-bold text-white"
+                              style={{ backgroundColor: mColor.dotHex }}
+                            >
+                              {m.name.slice(0, 1).toUpperCase()}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
+                        style={{ backgroundColor: previewAssignment.primaryColorInfo.dotHex }}
+                      >
+                        {previewAssignment.label.slice(0, 1).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 truncate">
+                        {previewAssignment.label}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Preassigned Event Type Badge */}
+                <div
+                  className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white flex items-center gap-1 shadow-2xs shrink-0"
+                  style={{ backgroundColor: currentEventTypeInfo.bgHex }}
+                >
+                  <span>{currentEventTypeInfo.icon}</span>
+                  <span>{currentEventTypeInfo.name}</span>
+                </div>
+              </div>
+
+              <div className="relative z-10 text-sm font-bold text-slate-900 truncate">
+                {title.trim() || 'Family School Event'}
+              </div>
+
+              <div className="relative z-10 text-xs font-semibold text-slate-700 opacity-90 flex items-center gap-2 truncate">
+                <span>{allDay ? 'All Day' : `${startTime} – ${endTime}`}</span>
+                {location.trim() && (
+                  <>
+                    <span>•</span>
+                    <span className="truncate">{location}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Date & Time Row */}
           <div className="space-y-2.5 pt-1">
@@ -504,6 +712,26 @@ export const EventModal: React.FC = () => {
             )}
           </div>
 
+          {/* Calendar Select */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+              <CalIcon className="w-3.5 h-3.5 text-gray-500" /> Calendar
+            </label>
+            <select
+              id="event-calendar-select"
+              value={calendarId}
+              disabled={!canSave}
+              onChange={(e) => setCalendarId(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-medium"
+            >
+              {calendars.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.member_name ? `(${c.member_name})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Location */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
@@ -527,7 +755,7 @@ export const EventModal: React.FC = () => {
             </label>
             <textarea
               id="event-description-input"
-              rows={3}
+              rows={2}
               disabled={!canSave}
               value={description}
               onChange={(e) => setDescription(e.target.value)}

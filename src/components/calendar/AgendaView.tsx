@@ -3,11 +3,11 @@ import { format, isToday, isTomorrow } from 'date-fns';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
 import { CalendarEvent } from '../../types';
-import { MapPin, Search, Globe, Repeat, Calendar as CalIcon, Plus, Clock } from 'lucide-react';
-import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
+import { Search, Calendar as CalIcon, Plus } from 'lucide-react';
+import { EventCard } from './EventCard';
 
 export const AgendaView: React.FC = () => {
-  const { filteredEvents, eventTypes, openEditEventModal, openCreateEventModal } = useCalendar();
+  const { filteredEvents, openEditEventModal, openCreateEventModal, eventTypes } = useCalendar();
   const { members } = useFamily();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -56,7 +56,7 @@ export const AgendaView: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search family events, places, notes..."
-            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900 transition-colors"
+            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900 transition-colors font-medium"
           />
         </div>
 
@@ -100,89 +100,17 @@ export const AgendaView: React.FC = () => {
                 </div>
 
                 {/* Event Cards */}
-                <div className="space-y-2 pl-2">
-                  {dayEvents.map((evt) => {
-                    const startD = new Date(evt.start_time);
-                    const endD = new Date(evt.end_time);
-                    const assignedMember = members.find((m) =>
-                      evt.assigned_member_ids?.includes(m.id)
-                    );
-                    const memberColor = assignedMember?.color || evt.member_color || evt.color;
-                    const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
-                    const memberName = assignedMember?.name || evt.member_name || 'Family';
-                    const isGoogle = evt.google_event_id || evt.calendar_source === 'google';
-
-                    return (
-                      <div
-                        key={evt.id}
-                        id={`agenda-evt-${evt.id}`}
-                        onClick={() => openEditEventModal(evt)}
-                        style={{
-                          backgroundColor: colorInfo.hex,
-                          borderColor: colorInfo.borderHex,
-                        }}
-                        className="p-3.5 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
-                      >
-                        <div className="flex items-start gap-3 flex-1">
-                          <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-2xs shrink-0 text-white mt-0.5"
-                            style={{ backgroundColor: colorInfo.dotHex }}
-                          >
-                            {memberName.slice(0, 1).toUpperCase()}
-                          </div>
-
-                          <div className="flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-bold text-slate-800">
-                                {memberName}
-                              </span>
-
-                              {/* Predefined Event Type Badge */}
-                              <span
-                                className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white flex items-center gap-1 shadow-2xs"
-                                style={{ backgroundColor: eventType.bgHex }}
-                              >
-                                <span>{eventType.icon}</span>
-                                <span>{eventType.name}</span>
-                              </span>
-
-                              {evt.recurring_rule !== 'none' && (
-                                <Repeat className="w-3 h-3 text-slate-600 opacity-60" />
-                              )}
-                              {isGoogle && (
-                                <Globe className="w-3 h-3 text-blue-600" title="Google Synced" />
-                              )}
-                            </div>
-
-                            <h4 className="text-sm font-bold text-slate-900 mt-1">
-                              {evt.title}
-                            </h4>
-
-                            {evt.description && (
-                              <p className="text-xs text-slate-700 opacity-85 mt-0.5 line-clamp-1">
-                                {evt.description}
-                              </p>
-                            )}
-                            {evt.location && (
-                              <div className="flex items-center gap-1 text-[11px] text-slate-600 opacity-75 mt-1">
-                                <MapPin className="w-3 h-3" />
-                                <span>{evt.location}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                          <span className="text-xs font-semibold text-slate-600 opacity-90">
-                            {evt.all_day
-                              ? 'All day'
-                              : `${format(startD, 'h:mm a')} - ${format(endD, 'h:mm a')}`}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="space-y-2.5 pl-1">
+                  {dayEvents.map((evt) => (
+                    <EventCard
+                      key={evt.id}
+                      event={evt}
+                      members={members}
+                      eventTypes={eventTypes}
+                      onClick={() => openEditEventModal(evt)}
+                      showDetails={true}
+                    />
+                  ))}
                 </div>
               </div>
             );

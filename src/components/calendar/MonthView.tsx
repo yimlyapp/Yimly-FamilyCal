@@ -13,17 +13,18 @@ import {
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
 import { CalendarEvent } from '../../types';
-import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
+import { getPastelColorInfo, getEventTypeInfo, getEventAssignmentInfo } from '../../utils/colors';
 import { Plus, ChevronRight } from 'lucide-react';
+import { EventCard, EventPill } from './EventCard';
 
 export const MonthView: React.FC = () => {
   const {
     currentDate,
     setCurrentDate,
     filteredEvents,
-    eventTypes,
     openCreateEventModal,
     openEditEventModal,
+    eventTypes,
   } = useCalendar();
   const { members } = useFamily();
 
@@ -125,32 +126,18 @@ export const MonthView: React.FC = () => {
 
                 {/* Event Pills inside day cell */}
                 <div className="flex flex-col gap-1 my-1 flex-1 overflow-hidden">
-                  {visibleEvents.map((evt) => {
-                    const assignedMember = members.find((m) =>
-                      evt.assigned_member_ids?.includes(m.id)
-                    );
-                    const memberColor = assignedMember?.color || evt.member_color || evt.color;
-                    const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
-
-                    return (
-                      <div
-                        key={evt.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditEventModal(evt);
-                        }}
-                        style={{
-                          backgroundColor: colorInfo.hex,
-                          borderColor: colorInfo.borderHex,
-                        }}
-                        className="px-2 py-1 rounded-lg border text-[11px] font-bold text-slate-800 truncate flex items-center gap-1.5 shadow-2xs hover:shadow-xs transition-shadow"
-                      >
-                        <span className="text-[10px] shrink-0">{eventType.icon}</span>
-                        <span className="truncate">{evt.title}</span>
-                      </div>
-                    );
-                  })}
+                  {visibleEvents.map((evt) => (
+                    <EventPill
+                      key={evt.id}
+                      event={evt}
+                      members={members}
+                      eventTypes={eventTypes}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditEventModal(evt);
+                      }}
+                    />
+                  ))}
                 </div>
 
                 {/* Overflow +X more link */}
@@ -212,19 +199,24 @@ export const MonthView: React.FC = () => {
                   </span>
 
                   {/* Member Color Dots under date */}
-                  <div className="flex items-center gap-0.5 h-2 mt-0.5">
+                  <div className="flex items-center justify-center gap-0.5 h-2 mt-0.5 flex-wrap max-w-[28px]">
                     {dayEvents.slice(0, 3).map((evt) => {
-                      const assignedMember = members.find((m) =>
-                        evt.assigned_member_ids?.includes(m.id)
-                      );
-                      const colorInfo = getPastelColorInfo(
-                        assignedMember?.color || evt.member_color || evt.color
-                      );
+                      const assignment = getEventAssignmentInfo(evt, members);
+                      if (assignment.isFamilyEvent) {
+                        return (
+                          <span
+                            key={evt.id}
+                            className="w-1.5 h-1.5 rounded-full ring-[0.5px] ring-black/20"
+                            style={{ backgroundColor: assignment.adminColorInfo.dotHex }}
+                            title="Family Event"
+                          />
+                        );
+                      }
                       return (
                         <span
                           key={evt.id}
                           className="w-1.5 h-1.5 rounded-full"
-                          style={{ backgroundColor: colorInfo.dotHex }}
+                          style={{ backgroundColor: assignment.primaryColorInfo.dotHex }}
                         />
                       );
                     })}
@@ -237,73 +229,26 @@ export const MonthView: React.FC = () => {
 
         {/* Selected Day Agenda Section */}
         <div className="flex flex-col gap-3 pt-1">
-          <h3 className="text-base font-bold text-slate-900 px-1">
+          <h3 className="text-base font-bold text-slate-900 px-1 font-serif tracking-tight">
             {format(selectedDay, 'EEEE, d MMMM')}
           </h3>
 
           <div className="flex flex-col gap-2.5">
             {selectedDayEvents.length === 0 ? (
-              <div className="py-4 px-4 rounded-2xl bg-white border border-dashed border-gray-200 text-gray-400 text-xs font-medium text-center">
+              <div className="py-6 px-4 rounded-2xl bg-white border border-dashed border-gray-200 text-gray-400 text-xs font-medium text-center shadow-2xs">
                 No events scheduled for this date
               </div>
             ) : (
-              selectedDayEvents.map((evt) => {
-                const assignedMember = members.find((m) =>
-                  evt.assigned_member_ids?.includes(m.id)
-                );
-                const memberColor = assignedMember?.color || evt.member_color || evt.color;
-                const colorInfo = getPastelColorInfo(memberColor);
-                const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
-                const memberName = assignedMember?.name || evt.member_name || 'Family';
-
-                return (
-                  <div
-                    key={evt.id}
-                    onClick={() => openEditEventModal(evt)}
-                    style={{
-                      backgroundColor: colorInfo.hex,
-                      borderColor: colorInfo.borderHex,
-                    }}
-                    className="p-3.5 rounded-2xl border shadow-2xs active:scale-98 transition-transform cursor-pointer flex flex-col gap-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
-                          style={{ backgroundColor: colorInfo.dotHex }}
-                        >
-                          {memberName.slice(0, 1).toUpperCase()}
-                        </div>
-                        <span className="text-xs font-bold text-slate-800">
-                          {memberName}
-                        </span>
-                      </div>
-
-                      <div
-                        className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white flex items-center gap-0.5 shadow-2xs"
-                        style={{ backgroundColor: eventType.bgHex }}
-                      >
-                        <span>{eventType.icon}</span>
-                        <span>{eventType.name}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 leading-snug">
-                        {evt.title}
-                      </h4>
-                      <span className="text-[11px] font-semibold text-slate-600 block mt-0.5">
-                        {evt.all_day
-                          ? 'All Day'
-                          : `${format(new Date(evt.start_time), 'h:mm a')} – ${format(
-                              new Date(evt.end_time),
-                              'h:mm a'
-                            )}`}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
+              selectedDayEvents.map((evt) => (
+                <EventCard
+                  key={evt.id}
+                  event={evt}
+                  members={members}
+                  eventTypes={eventTypes}
+                  onClick={() => openEditEventModal(evt)}
+                  showDetails={true}
+                />
+              ))
             )}
           </div>
         </div>

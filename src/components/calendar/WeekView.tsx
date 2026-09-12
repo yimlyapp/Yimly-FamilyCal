@@ -8,16 +8,16 @@ import {
 } from 'date-fns';
 import { useCalendar } from '../../context/CalendarContext';
 import { useFamily } from '../../context/FamilyContext';
-import { User, Plus, ChevronRight, Globe } from 'lucide-react';
-import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
+import { Plus } from 'lucide-react';
+import { EventCard } from './EventCard';
 
 export const WeekView: React.FC = () => {
   const {
     currentDate,
     filteredEvents,
-    eventTypes,
     openCreateEventModal,
     openEditEventModal,
+    eventTypes,
   } = useCalendar();
   const { members } = useFamily();
 
@@ -93,69 +93,16 @@ export const WeekView: React.FC = () => {
                     <span>Add event for {format(day, 'EEEE')}</span>
                   </button>
                 ) : (
-                  dayEvents.map((evt) => {
-                    const assignedMember = members.find((m) =>
-                      evt.assigned_member_ids?.includes(m.id)
-                    );
-                    const memberColor = assignedMember?.color || evt.member_color || evt.color;
-                    const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
-                    const memberName = assignedMember?.name || evt.member_name || 'Family';
-
-                    return (
-                      <div
-                        key={evt.id}
-                        onClick={() => openEditEventModal(evt)}
-                        style={{
-                          backgroundColor: colorInfo.hex,
-                          borderColor: colorInfo.borderHex,
-                        }}
-                        className="p-4 rounded-2xl border shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-2.5 group relative overflow-hidden active:scale-99"
-                      >
-                        {/* Top Row: Member Avatar & Name + Event Type Badge */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-2xs shrink-0"
-                              style={{
-                                backgroundColor: colorInfo.dotHex,
-                                color: '#FFFFFF',
-                              }}
-                            >
-                              {memberName.slice(0, 1).toUpperCase()}
-                            </div>
-                            <span className="text-xs font-bold text-slate-800 tracking-tight">
-                              {memberName}
-                            </span>
-                          </div>
-
-                          {/* Event Category/Type Badge Pill */}
-                          <div
-                            className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white flex items-center gap-1 shadow-2xs shrink-0"
-                            style={{ backgroundColor: eventType.bgHex }}
-                          >
-                            <span>{eventType.icon}</span>
-                            <span>{eventType.name}</span>
-                          </div>
-                        </div>
-
-                        {/* Title & Time */}
-                        <div className="flex flex-col">
-                          <h4 className="text-sm font-bold text-slate-900 leading-snug group-hover:text-blue-900 transition-colors">
-                            {evt.title}
-                          </h4>
-                          <span className="text-xs font-semibold text-slate-600 opacity-90 mt-0.5">
-                            {evt.all_day
-                              ? 'All Day'
-                              : `${format(new Date(evt.start_time), 'h:mm a')} – ${format(
-                                  new Date(evt.end_time),
-                                  'h:mm a'
-                                )}`}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
+                  dayEvents.map((evt) => (
+                    <EventCard
+                      key={evt.id}
+                      event={evt}
+                      members={members}
+                      eventTypes={eventTypes}
+                      onClick={() => openEditEventModal(evt)}
+                      showDetails={true}
+                    />
+                  ))
                 )}
               </div>
             </div>
@@ -198,65 +145,16 @@ export const WeekView: React.FC = () => {
                     No events
                   </div>
                 ) : (
-                  dayEvents.map((evt) => {
-                    const assignedMember = members.find((m) =>
-                      evt.assigned_member_ids?.includes(m.id)
-                    );
-                    const memberColor = assignedMember?.color || evt.member_color || evt.color;
-                    const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
-                    const memberName = assignedMember?.name || evt.member_name || 'Family';
-
-                    return (
-                      <div
-                        key={evt.id}
-                        onClick={() => openEditEventModal(evt)}
-                        style={{
-                          backgroundColor: colorInfo.hex,
-                          borderColor: colorInfo.borderHex,
-                        }}
-                        className="p-3.5 rounded-2xl border shadow-2xs active:scale-98 transition-transform cursor-pointer flex flex-col gap-2"
-                      >
-                        {/* Member & Badge */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <div
-                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
-                              style={{ backgroundColor: colorInfo.dotHex }}
-                            >
-                              {memberName.slice(0, 1).toUpperCase()}
-                            </div>
-                            <span className="text-xs font-bold text-slate-800">
-                              {memberName}
-                            </span>
-                          </div>
-
-                          <div
-                            className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white flex items-center gap-0.5 shadow-2xs"
-                            style={{ backgroundColor: eventType.bgHex }}
-                          >
-                            <span>{eventType.icon}</span>
-                            <span>{eventType.name}</span>
-                          </div>
-                        </div>
-
-                        {/* Title & Time */}
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900 leading-snug">
-                            {evt.title}
-                          </h4>
-                          <span className="text-[11px] font-semibold text-slate-600 block mt-0.5">
-                            {evt.all_day
-                              ? 'All Day'
-                              : `${format(new Date(evt.start_time), 'h:mm a')} – ${format(
-                                  new Date(evt.end_time),
-                                  'h:mm a'
-                                )}`}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
+                  dayEvents.map((evt) => (
+                    <EventCard
+                      key={evt.id}
+                      event={evt}
+                      members={members}
+                      eventTypes={eventTypes}
+                      onClick={() => openEditEventModal(evt)}
+                      showDetails={true}
+                    />
+                  ))
                 )}
               </div>
             </div>
