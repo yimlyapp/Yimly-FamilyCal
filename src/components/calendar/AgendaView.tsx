@@ -70,7 +70,7 @@ export const AgendaView: React.FC = () => {
       </div>
 
       {/* Events Stream */}
-      <div className="flex-1 overflow-y-auto max-h-[640px] p-4 space-y-6 bg-white scrollbar-thin">
+      <div className="flex-1 overflow-y-auto max-h-[640px] p-4 pb-calendar-mobile md:pb-4 space-y-6 bg-white scrollbar-thin">
         {dateKeys.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
             <CalIcon className="w-10 h-10 mx-auto text-gray-300 mb-2" />

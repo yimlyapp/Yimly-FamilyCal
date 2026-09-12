@@ -23,7 +23,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, setActiveTab })
   return (
     <nav
       id="mobile-bottom-nav"
-      className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around px-2 z-40 pb-safe shadow-lg"
+      className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around px-2 z-40 shadow-lg"
+      style={{
+        height: 'calc(4rem + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;

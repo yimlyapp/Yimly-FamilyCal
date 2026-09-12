@@ -163,7 +163,13 @@ export const WeekView: React.FC = () => {
       </div>
 
       {/* --- MOBILE WEEK VIEW (Matching Reference Middle-Right Layout) --- */}
-      <div className="flex md:hidden flex-col gap-4">
+      <div
+        id="mobile-week-calendar-container"
+        className="flex md:hidden flex-col gap-4 pb-calendar-mobile"
+        style={{
+          paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px) + 32px)',
+        }}
+      >
         {weekDays.map((day) => {
           const dayEvents = getEventsForDay(day);
           const isDayToday = isToday(day);

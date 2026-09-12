@@ -165,7 +165,13 @@ export const MonthView: React.FC = () => {
       </div>
 
       {/* --- MOBILE MONTH VIEW (Matching Reference Far-Right Layout) --- */}
-      <div className="flex md:hidden flex-col gap-4">
+      <div
+        id="mobile-month-calendar-container"
+        className="flex md:hidden flex-col gap-4 pb-calendar-mobile"
+        style={{
+          paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px) + 32px)',
+        }}
+      >
         {/* Mobile 7-Column Calendar Grid */}
         <div className="bg-white rounded-2xl border border-gray-200 p-3 shadow-2xs">
           {/* Day Names Header */}

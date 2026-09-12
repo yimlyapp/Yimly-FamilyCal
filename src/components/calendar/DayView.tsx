@@ -41,7 +41,7 @@ export const DayView: React.FC = () => {
       </div>
 
       {/* Daily Schedule Stream */}
-      <div className="flex-1 overflow-y-auto max-h-[640px] p-4 space-y-3 bg-white scrollbar-thin">
+      <div className="flex-1 overflow-y-auto max-h-[640px] p-4 pb-calendar-mobile md:pb-4 space-y-3 bg-white scrollbar-thin">
         {dayEvents.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
             <p className="text-sm font-semibold text-gray-600">No scheduled events for this day.</p>
