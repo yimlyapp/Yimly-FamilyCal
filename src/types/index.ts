@@ -108,6 +108,9 @@ export interface CalendarEvent {
   description?: string | null;
   location?: string | null;
   color: string;
+  event_type?: string; // Predefined or custom event type ('School', 'Sport', 'Appointment', 'Work', 'Birthday', 'Holiday', 'Social', 'Important', 'Other')
+  member_name?: string;
+  member_color?: string;
   start_time: string; // ISO String
   end_time: string;   // ISO String
   all_day: boolean;
@@ -118,6 +121,14 @@ export interface CalendarEvent {
   google_calendar_id?: string | null;
   sync_status: SyncStatus;
   created_by?: string | null;
+}
+
+export interface EventTypeDefinition {
+  id: string;
+  name: string;
+  color: string;
+  icon?: string;
+  is_default?: number;
 }
 
 export type Priority = 'low' | 'medium' | 'high';

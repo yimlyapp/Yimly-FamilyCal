@@ -178,6 +178,26 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Event Types
+  getEventTypes: () => fetchJson<import('../types').EventTypeDefinition[]>('/api/event-types'),
+
+  createEventType: (data: { name: string; color: string; icon?: string }) =>
+    fetchJson<import('../types').EventTypeDefinition>('/api/event-types', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateEventType: (id: string, data: { name?: string; color?: string; icon?: string }) =>
+    fetchJson<import('../types').EventTypeDefinition>(`/api/event-types/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteEventType: (id: string) =>
+    fetchJson<{ success: boolean; message: string }>(`/api/event-types/${id}`, {
+      method: 'DELETE',
+    }),
+
   // Tasks
   getTasks: () => fetchJson<Task[]>('/api/tasks'),
 

@@ -21,6 +21,7 @@ export const MonthView: React.FC = () => {
     currentDate,
     setCurrentDate,
     filteredEvents,
+    eventTypes,
     openCreateEventModal,
     openEditEventModal,
   } = useCalendar();
@@ -130,7 +131,7 @@ export const MonthView: React.FC = () => {
                     );
                     const memberColor = assignedMember?.color || evt.member_color || evt.color;
                     const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title);
+                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
 
                     return (
                       <div
@@ -252,7 +253,7 @@ export const MonthView: React.FC = () => {
                 );
                 const memberColor = assignedMember?.color || evt.member_color || evt.color;
                 const colorInfo = getPastelColorInfo(memberColor);
-                const eventType = getEventTypeInfo(evt.title);
+                const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
                 const memberName = assignedMember?.name || evt.member_name || 'Family';
 
                 return (

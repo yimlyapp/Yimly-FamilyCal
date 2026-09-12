@@ -13,10 +13,10 @@ import {
   FileText,
   Repeat,
   Users,
-  Palette,
+  Tag,
   Globe,
 } from 'lucide-react';
-import { PastelColorPicker, getPastelColorInfo } from '../../utils/colors';
+import { getPastelColorInfo, getEventTypeInfo } from '../../utils/colors';
 
 export const EventModal: React.FC = () => {
   const {
@@ -25,6 +25,7 @@ export const EventModal: React.FC = () => {
     eventModalInitialDate,
     closeEventModal,
     calendars,
+    eventTypes,
     createEvent,
     updateEvent,
     deleteEvent,
@@ -37,7 +38,8 @@ export const EventModal: React.FC = () => {
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [calendarId, setCalendarId] = useState('');
-  const [color, setColor] = useState('#F8BBD0');
+  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [eventType, setEventType] = useState('School');
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [endDate, setEndDate] = useState('');
@@ -61,11 +63,17 @@ export const EventModal: React.FC = () => {
       setDescription(selectedEvent.description || '');
       setLocation(selectedEvent.location || '');
       setCalendarId(selectedEvent.calendar_id);
-      setColor(selectedEvent.color || '#F8BBD0');
+      
+      const primaryMemberId = selectedEvent.assigned_member_ids?.[0] || '';
+      setSelectedMemberId(primaryMemberId);
+      setAssignedMemberIds(selectedEvent.assigned_member_ids || []);
+
+      const detectedType = selectedEvent.event_type || getEventTypeInfo(selectedEvent.title, undefined, eventTypes).name;
+      setEventType(detectedType || 'School');
+
       setAllDay(Boolean(selectedEvent.all_day));
       setRecurringRule(selectedEvent.recurring_rule || 'none');
       setRecurringUntil(selectedEvent.recurring_until ? selectedEvent.recurring_until.slice(0, 10) : '');
-      setAssignedMemberIds(selectedEvent.assigned_member_ids || []);
 
       const sDate = new Date(selectedEvent.start_time);
       const eDate = new Date(selectedEvent.end_time);
@@ -88,33 +96,42 @@ export const EventModal: React.FC = () => {
       setAllDay(false);
       setRecurringRule('none');
       setRecurringUntil('');
-      setAssignedMemberIds([]);
+      setEventType('School');
 
-      // Default Calendar & Color
+      // Default Calendar & Member selection
       const defaultCal = calendars.find((c) => c.is_default) || calendars[0];
       if (defaultCal) {
         setCalendarId(defaultCal.id);
-        setColor(defaultCal.color || '#F8BBD0');
         if (defaultCal.member_id) {
+          setSelectedMemberId(defaultCal.member_id);
           setAssignedMemberIds([defaultCal.member_id]);
+        } else if (members.length > 0) {
+          setSelectedMemberId(members[0].id);
+          setAssignedMemberIds([members[0].id]);
         } else {
+          setSelectedMemberId('');
           setAssignedMemberIds([]);
         }
+      } else if (members.length > 0) {
+        setSelectedMemberId(members[0].id);
+        setAssignedMemberIds([members[0].id]);
       } else {
-        setColor('#F8BBD0');
+        setSelectedMemberId('');
         setAssignedMemberIds([]);
       }
     }
     setError(null);
-  }, [isEventModalOpen, selectedEvent, eventModalInitialDate, calendars]);
+  }, [isEventModalOpen, selectedEvent, eventModalInitialDate, calendars, members, eventTypes]);
 
   if (!isEventModalOpen) return null;
 
-  const toggleMemberAssignment = (memberId: string) => {
-    setAssignedMemberIds((prev) =>
-      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
-    );
-  };
+  // Selected member automatically determines the card pastel background
+  const selectedMember = members.find((m) => m.id === selectedMemberId) || (members.length > 0 ? members[0] : null);
+  const memberColor = selectedMember?.color || '#F8BBD0';
+  const colorInfo = getPastelColorInfo(memberColor);
+
+  // Selected event type automatically determines the badge colour
+  const currentTypeInfo = getEventTypeInfo(title, eventType, eventTypes);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,18 +159,21 @@ export const EventModal: React.FC = () => {
         endIso = new Date(`${endDate || startDate}T${endTime}:00`).toISOString();
       }
 
+      const finalMembers = selectedMemberId ? [selectedMemberId] : assignedMemberIds;
+
       const eventPayload: Partial<CalendarEvent> = {
         title: title.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
         calendar_id: calendarId,
-        color,
+        color: memberColor,
+        event_type: eventType,
         start_time: startIso,
         end_time: endIso,
         all_day: allDay,
         recurring_rule: recurringRule,
         recurring_until: recurringUntil ? `${recurringUntil}T23:59:59Z` : null,
-        assigned_member_ids: assignedMemberIds,
+        assigned_member_ids: finalMembers,
       };
 
       if (selectedEvent) {
@@ -185,7 +205,6 @@ export const EventModal: React.FC = () => {
   };
 
   const isGoogle = selectedEvent?.google_event_id || selectedEvent?.calendar_source === 'google';
-  const colorInfo = getPastelColorInfo(color);
 
   return (
     <div
@@ -231,6 +250,48 @@ export const EventModal: React.FC = () => {
           </div>
         )}
 
+        {/* Live Preview Card */}
+        <div
+          id="event-preview-card"
+          className="mb-4 p-3.5 rounded-2xl border shadow-2xs flex flex-col gap-2 transition-colors"
+          style={{
+            backgroundColor: colorInfo.hex,
+            borderColor: colorInfo.borderHex,
+          }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0"
+                style={{ backgroundColor: colorInfo.dotHex }}
+              >
+                {(selectedMember?.name || 'F').slice(0, 1).toUpperCase()}
+              </div>
+              <span className="text-xs font-bold text-slate-800">
+                {selectedMember?.name || 'Whole Family'}
+              </span>
+            </div>
+
+            <div
+              className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white flex items-center gap-1 shadow-2xs"
+              style={{ backgroundColor: currentTypeInfo.bgHex }}
+            >
+              <span>{currentTypeInfo.icon}</span>
+              <span>{currentTypeInfo.name}</span>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+              {title.trim() || 'Untitled Event'}
+            </h4>
+            <span className="text-[11px] font-semibold text-slate-600 block mt-0.5">
+              {allDay ? 'All Day' : `${startTime} – ${endTime}`}
+              {location.trim() ? ` • ${location.trim()}` : ''}
+            </span>
+          </div>
+        </div>
+
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title Input */}
@@ -245,13 +306,79 @@ export const EventModal: React.FC = () => {
               disabled={!canSave}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Family Pizza Night, Soccer Practice..."
+              placeholder="e.g. Science Project, Soccer Practice, Dentist..."
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-900 transition-colors disabled:opacity-70 font-medium"
             />
           </div>
 
-          {/* Calendar Select & 15-Color Palette */}
-          <div className="space-y-3">
+          {/* Family Member & Event Type Select Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 1. Family Member (Determines background colour) */}
+            <div>
+              <label htmlFor="event-member-select" className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-gray-500" /> Family Member
+              </label>
+              <select
+                id="event-member-select"
+                value={selectedMemberId}
+                disabled={!canSave}
+                onChange={(e) => {
+                  const newMemberId = e.target.value;
+                  setSelectedMemberId(newMemberId);
+                  setAssignedMemberIds(newMemberId ? [newMemberId] : []);
+                  // Auto-align calendar if member has specific calendar
+                  const matchedCal = calendars.find((c) => c.member_id === newMemberId);
+                  if (matchedCal) {
+                    setCalendarId(matchedCal.id);
+                  }
+                }}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-semibold"
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.role})
+                  </option>
+                ))}
+                <option value="">Whole Family / Shared</option>
+              </select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Determines full event-card background colour.
+              </p>
+            </div>
+
+            {/* 2. Event Type (Automatically determines badge colour) */}
+            <div>
+              <label htmlFor="event-type-select" className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-gray-500" /> Event Type
+              </label>
+              <select
+                id="event-type-select"
+                value={eventType}
+                disabled={!canSave}
+                onChange={(e) => setEventType(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-semibold"
+              >
+                {eventTypes.map((t) => (
+                  <option key={t.id || t.name} value={t.name}>
+                    {t.icon ? `${t.icon} ` : ''}{t.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[11px] text-gray-500">Badge colour:</span>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white flex items-center gap-1 shadow-2xs"
+                  style={{ backgroundColor: currentTypeInfo.bgHex }}
+                >
+                  <span>{currentTypeInfo.icon}</span>
+                  <span>{currentTypeInfo.name}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Calendar Select */}
+          {calendars.length > 1 && (
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
                 <CalIcon className="w-3.5 h-3.5 text-gray-500" /> Calendar
@@ -260,17 +387,7 @@ export const EventModal: React.FC = () => {
                 id="event-calendar-select"
                 value={calendarId}
                 disabled={!canSave}
-                onChange={(e) => {
-                  const newCalId = e.target.value;
-                  setCalendarId(newCalId);
-                  const selectedCal = calendars.find((c) => c.id === newCalId);
-                  if (selectedCal) {
-                    setColor(selectedCal.color || '#F8BBD0');
-                    if (!selectedEvent && selectedCal.member_id) {
-                      setAssignedMemberIds([selectedCal.member_id]);
-                    }
-                  }
-                }}
+                onChange={(e) => setCalendarId(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 focus:outline-none focus:border-gray-900 cursor-pointer disabled:opacity-70 font-medium"
               >
                 {calendars.map((c) => (
@@ -280,55 +397,7 @@ export const EventModal: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            {/* 15 Pastel Color Swatches */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
-                <Palette className="w-3.5 h-3.5 text-gray-500" /> Color Accent (15 Pastel Shades)
-              </label>
-              <PastelColorPicker
-                selectedColor={color}
-                onSelectColor={setColor}
-                disabled={!canSave}
-              />
-            </div>
-          </div>
-
-          {/* Assigned Family Members Chips */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
-              <Users className="w-3.5 h-3.5 text-gray-500" /> Assigned Family Members
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {members.map((m) => {
-                const isAssigned = assignedMemberIds.includes(m.id);
-                const mColorInfo = getPastelColorInfo(m.color);
-
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    disabled={!canSave}
-                    onClick={() => toggleMemberAssignment(m.id)}
-                    style={{
-                      backgroundColor: isAssigned ? mColorInfo.hex : '#F8FAFC',
-                      borderColor: isAssigned ? mColorInfo.borderHex : '#E2E8F0',
-                      color: isAssigned ? mColorInfo.textHex : '#64748B',
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs border font-medium transition-all cursor-pointer shadow-2xs ${
-                      isAssigned ? 'font-bold ring-1 ring-black/10' : 'hover:border-gray-300'
-                    } disabled:opacity-70`}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full border"
-                      style={{ backgroundColor: mColorInfo.dotHex, borderColor: mColorInfo.borderHex }}
-                    />
-                    <span>{m.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          )}
 
           {/* Date & Time Row */}
           <div className="space-y-2.5 pt-1">

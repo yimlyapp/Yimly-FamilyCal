@@ -1,5 +1,6 @@
 import React from 'react';
 import { Check } from 'lucide-react';
+import { EventTypeDefinition } from '../types';
 
 export interface EventTypeInfo {
   name: string;
@@ -8,41 +9,92 @@ export interface EventTypeInfo {
   icon: string;
 }
 
-export function getEventTypeInfo(title?: string, explicitType?: string): EventTypeInfo {
-  const t = (explicitType || title || '').toLowerCase();
+export const DEFAULT_EVENT_TYPES: EventTypeDefinition[] = [
+  { id: 'school', name: 'School', color: '#EAB308', icon: '🎓' },
+  { id: 'sport', name: 'Sport', color: '#3B82F6', icon: '⚽' },
+  { id: 'appointment', name: 'Appointment', color: '#22C55E', icon: '🩺' },
+  { id: 'work', name: 'Work', color: '#F97316', icon: '💼' },
+  { id: 'birthday', name: 'Birthday', color: '#EC4899', icon: '🎁' },
+  { id: 'holiday', name: 'Holiday', color: '#8B5CF6', icon: '🏖️' },
+  { id: 'social', name: 'Social', color: '#C084FC', icon: '🍸' },
+  { id: 'important', name: 'Important', color: '#EF4444', icon: '⚡' },
+  { id: 'other', name: 'Other', color: '#64748B', icon: '📌' },
+];
+
+export function getEventTypeInfo(
+  title?: string,
+  explicitType?: string,
+  customTypes?: EventTypeDefinition[]
+): EventTypeInfo {
+  const allTypes = customTypes && customTypes.length > 0 ? customTypes : DEFAULT_EVENT_TYPES;
+
+  // 1. If explicitType is given, find direct match
+  if (explicitType && explicitType.trim()) {
+    const trimmed = explicitType.trim();
+    const matched = allTypes.find(
+      (t) => t.name.toLowerCase() === trimmed.toLowerCase() || t.id.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (matched) {
+      return {
+        name: matched.name,
+        bgHex: matched.color,
+        textHex: '#FFFFFF',
+        icon: matched.icon || '📌',
+      };
+    }
+    // Return explicit type even if not in default list with grey fallback
+    return {
+      name: trimmed,
+      bgHex: '#64748B',
+      textHex: '#FFFFFF',
+      icon: '📌',
+    };
+  }
+
+  // 2. Keyword fallback matching from event title
+  const t = (title || '').toLowerCase();
   
-  if (t.includes('school') || t.includes('excursion') || t.includes('class') || t.includes('homework')) {
-    return { name: 'School', bgHex: '#EAB308', textHex: '#FFFFFF', icon: '🎓' };
+  if (t.includes('school') || t.includes('excursion') || t.includes('class') || t.includes('homework') || t.includes('exam')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'school');
+    return { name: 'School', bgHex: matched?.color || '#EAB308', textHex: '#FFFFFF', icon: matched?.icon || '🎓' };
   }
-  if (t.includes('sport') || t.includes('football') || t.includes('basketball') || t.includes('match') || t.includes('training') || t.includes('soccer') || t.includes('tennis') || t.includes('dance')) {
-    if (t.includes('dance')) return { name: 'Sport', bgHex: '#3B82F6', textHex: '#FFFFFF', icon: '🎵' };
-    return { name: 'Sport', bgHex: '#3B82F6', textHex: '#FFFFFF', icon: '⚽' };
+  if (t.includes('sport') || t.includes('football') || t.includes('basketball') || t.includes('match') || t.includes('training') || t.includes('soccer') || t.includes('tennis') || t.includes('dance') || t.includes('gym')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'sport');
+    return { name: 'Sport', bgHex: matched?.color || '#3B82F6', textHex: '#FFFFFF', icon: matched?.icon || '⚽' };
   }
-  if (t.includes('doctor') || t.includes('appointment') || t.includes('dentist') || t.includes('clinic')) {
-    return { name: 'Appointment', bgHex: '#22C55E', textHex: '#FFFFFF', icon: '🩺' };
+  if (t.includes('doctor') || t.includes('appointment') || t.includes('dentist') || t.includes('clinic') || t.includes('hospital')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'appointment');
+    return { name: 'Appointment', bgHex: matched?.color || '#22C55E', textHex: '#FFFFFF', icon: matched?.icon || '🩺' };
   }
-  if (t.includes('work') || t.includes('meeting') || t.includes('client')) {
-    return { name: 'Work', bgHex: '#F97316', textHex: '#FFFFFF', icon: '💼' };
+  if (t.includes('work') || t.includes('meeting') || t.includes('client') || t.includes('office')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'work');
+    return { name: 'Work', bgHex: matched?.color || '#F97316', textHex: '#FFFFFF', icon: matched?.icon || '💼' };
   }
   if (t.includes('birthday') || t.includes('party')) {
-    return { name: 'Birthday', bgHex: '#EC4899', textHex: '#FFFFFF', icon: '🎁' };
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'birthday');
+    return { name: 'Birthday', bgHex: matched?.color || '#EC4899', textHex: '#FFFFFF', icon: matched?.icon || '🎁' };
   }
-  if (t.includes('holiday') || t.includes('trip') || t.includes('fishing') || t.includes('vacation')) {
-    return { name: 'Holiday', bgHex: '#EF4444', textHex: '#FFFFFF', icon: '🏖️' };
+  if (t.includes('holiday') || t.includes('trip') || t.includes('fishing') || t.includes('vacation') || t.includes('flight')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'holiday');
+    return { name: 'Holiday', bgHex: matched?.color || '#8B5CF6', textHex: '#FFFFFF', icon: matched?.icon || '🏖️' };
   }
-  if (t.includes('social') || t.includes('lunch') || t.includes('gaming') || t.includes('friends') || t.includes('family time')) {
-    if (t.includes('grocery') || t.includes('shopping')) {
-      return { name: 'Other', bgHex: '#64748B', textHex: '#FFFFFF', icon: '🛒' };
-    }
-    return { name: 'Social', bgHex: '#9333EA', textHex: '#FFFFFF', icon: '🍸' };
+  if (t.includes('social') || t.includes('lunch') || t.includes('dinner') || t.includes('gaming') || t.includes('friends') || t.includes('family time')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'social');
+    return { name: 'Social', bgHex: matched?.color || '#C084FC', textHex: '#FFFFFF', icon: matched?.icon || '🍸' };
   }
-  if (t.includes('important') || t.includes('urgent')) {
-    return { name: 'Important', bgHex: '#A855F7', textHex: '#FFFFFF', icon: '⚡' };
+  if (t.includes('important') || t.includes('urgent') || t.includes('deadline')) {
+    const matched = allTypes.find((item) => item.name.toLowerCase() === 'important');
+    return { name: 'Important', bgHex: matched?.color || '#EF4444', textHex: '#FFFFFF', icon: matched?.icon || '⚡' };
   }
-  if (t.includes('grocery') || t.includes('shopping')) {
-    return { name: 'Other', bgHex: '#64748B', textHex: '#FFFFFF', icon: '🛒' };
-  }
-  return { name: 'Other', bgHex: '#64748B', textHex: '#FFFFFF', icon: '⭐' };
+
+  // 3. Default fallback is 'Other'
+  const otherMatched = allTypes.find((item) => item.name.toLowerCase() === 'other');
+  return {
+    name: otherMatched?.name || 'Other',
+    bgHex: otherMatched?.color || '#64748B',
+    textHex: '#FFFFFF',
+    icon: otherMatched?.icon || '📌',
+  };
 }
 
 export interface PastelColor {

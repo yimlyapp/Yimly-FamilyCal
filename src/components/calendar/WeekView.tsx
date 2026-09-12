@@ -15,6 +15,7 @@ export const WeekView: React.FC = () => {
   const {
     currentDate,
     filteredEvents,
+    eventTypes,
     openCreateEventModal,
     openEditEventModal,
   } = useCalendar();
@@ -98,7 +99,7 @@ export const WeekView: React.FC = () => {
                     );
                     const memberColor = assignedMember?.color || evt.member_color || evt.color;
                     const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title);
+                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
                     const memberName = assignedMember?.name || evt.member_name || 'Family';
 
                     return (
@@ -203,7 +204,7 @@ export const WeekView: React.FC = () => {
                     );
                     const memberColor = assignedMember?.color || evt.member_color || evt.color;
                     const colorInfo = getPastelColorInfo(memberColor);
-                    const eventType = getEventTypeInfo(evt.title);
+                    const eventType = getEventTypeInfo(evt.title, evt.event_type, eventTypes);
                     const memberName = assignedMember?.name || evt.member_name || 'Family';
 
                     return (

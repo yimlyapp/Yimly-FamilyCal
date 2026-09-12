@@ -87,6 +87,7 @@ export function initDatabase() {
       description TEXT,
       location TEXT,
       color TEXT,
+      event_type TEXT DEFAULT 'Other', -- School, Sport, Appointment, Work, Birthday, Holiday, Social, Important, Other
       start_time TEXT NOT NULL,
       end_time TEXT NOT NULL,
       all_day INTEGER DEFAULT 0,
@@ -102,6 +103,18 @@ export function initDatabase() {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE,
       FOREIGN KEY (calendar_id) REFERENCES calendars(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS event_types (
+      id TEXT PRIMARY KEY,
+      family_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      icon TEXT,
+      is_default INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
@@ -235,9 +248,55 @@ export function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_calendars_member ON calendars(member_id);
       CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
       CREATE INDEX IF NOT EXISTS idx_users_family_username ON users(family_id, username);
+      CREATE INDEX IF NOT EXISTS idx_event_types_family ON event_types(family_id);
     `);
   } catch (idxErr) {
     console.warn('Index creation warning:', idxErr);
+  }
+
+  // Safe startup migration: Ensure event_type column exists on events in existing databases
+  try {
+    const eventCols = db.prepare(`PRAGMA table_info(events);`).all() as Array<{ name: string }>;
+    const hasEventType = eventCols.some((col) => col.name === 'event_type');
+    if (!hasEventType) {
+      db.prepare(`ALTER TABLE events ADD COLUMN event_type TEXT DEFAULT 'Other';`).run();
+      console.log('Migration applied: added event_type column to events table.');
+    }
+    // Preserve all existing events. If an existing event has no event type, assign it default type 'Other'
+    db.prepare(`UPDATE events SET event_type = 'Other' WHERE event_type IS NULL OR event_type = '';`).run();
+  } catch (evtMigErr) {
+    console.warn('Events table migration check warning:', evtMigErr);
+  }
+
+  // Seed default event types for all families that don't have them
+  try {
+    const families = db.prepare(`SELECT id FROM families;`).all() as Array<{ id: string }>;
+    const nowIso = new Date().toISOString();
+    for (const fam of families) {
+      const typeCount = (db.prepare(`SELECT COUNT(*) as c FROM event_types WHERE family_id = ?;`).get(fam.id) as any)?.c || 0;
+      if (typeCount === 0) {
+        const insertType = db.prepare(`
+          INSERT INTO event_types (id, family_id, name, color, icon, is_default, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        `);
+        const defaults = [
+          { id: 'type_school_' + fam.id, name: 'School', color: '#EAB308', icon: '🎓' },
+          { id: 'type_sport_' + fam.id, name: 'Sport', color: '#3B82F6', icon: '⚽' },
+          { id: 'type_appt_' + fam.id, name: 'Appointment', color: '#22C55E', icon: '🩺' },
+          { id: 'type_work_' + fam.id, name: 'Work', color: '#F97316', icon: '💼' },
+          { id: 'type_bday_' + fam.id, name: 'Birthday', color: '#EC4899', icon: '🎁' },
+          { id: 'type_holiday_' + fam.id, name: 'Holiday', color: '#8B5CF6', icon: '🏖️' },
+          { id: 'type_social_' + fam.id, name: 'Social', color: '#C084FC', icon: '🍸' },
+          { id: 'type_important_' + fam.id, name: 'Important', color: '#EF4444', icon: '⚡' },
+          { id: 'type_other_' + fam.id, name: 'Other', color: '#64748B', icon: '📌' },
+        ];
+        for (const t of defaults) {
+          insertType.run(t.id, fam.id, t.name, t.color, t.icon, nowIso, nowIso);
+        }
+      }
+    }
+  } catch (typeMigErr) {
+    console.warn('Event types seed check warning:', typeMigErr);
   }
 
   seedInitialDataIfEmpty();

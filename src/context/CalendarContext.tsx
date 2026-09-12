@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { Calendar, CalendarEvent, CalendarViewMode, GoogleAccount } from '../types';
+import { Calendar, CalendarEvent, CalendarViewMode, GoogleAccount, EventTypeDefinition } from '../types';
 import { api } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useFamily } from './FamilyContext';
+import { DEFAULT_EVENT_TYPES } from '../utils/colors';
 
 interface CalendarContextType {
   calendars: Calendar[];
   events: CalendarEvent[];
   filteredEvents: CalendarEvent[];
+  eventTypes: EventTypeDefinition[];
   currentDate: Date;
   viewMode: CalendarViewMode;
   selectedEvent: CalendarEvent | null;
@@ -32,6 +34,9 @@ interface CalendarContextType {
   updateCalendar: (id: string, data: Partial<Calendar>) => Promise<Calendar>;
   deleteCalendar: (id: string) => Promise<void>;
   triggerGoogleSync: () => Promise<{ success: boolean; eventsSynced: number }>;
+  createEventType: (data: { name: string; color: string; icon?: string }) => Promise<EventTypeDefinition>;
+  updateEventType: (id: string, data: { name?: string; color?: string; icon?: string }) => Promise<EventTypeDefinition>;
+  deleteEventType: (id: string) => Promise<void>;
 }
 
 const CalendarContext = createContext<CalendarContextType | undefined>(undefined);
@@ -42,6 +47,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [eventTypes, setEventTypes] = useState<EventTypeDefinition[]>(DEFAULT_EVENT_TYPES);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -67,15 +73,21 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
     try {
-      const [calsRes, evtsRes, gAccountsRes] = await Promise.all([
+      const [calsRes, evtsRes, gAccountsRes, typesRes] = await Promise.all([
         api.getCalendars(),
         api.getEvents(),
         api.getGoogleAccounts().catch(() => []),
+        api.getEventTypes().catch(() => DEFAULT_EVENT_TYPES),
       ]);
 
       setCalendars(calsRes);
       setEvents(evtsRes);
       setGoogleAccounts(gAccountsRes);
+      if (typesRes && typesRes.length > 0) {
+        setEventTypes(typesRes);
+      } else {
+        setEventTypes(DEFAULT_EVENT_TYPES);
+      }
 
       // Default select all calendars initially if not set
       setSelectedCalendarIds((prev) => {
@@ -185,12 +197,30 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const createEventType = async (data: { name: string; color: string; icon?: string }) => {
+    const created = await api.createEventType(data);
+    await fetchCalendarData();
+    return created;
+  };
+
+  const updateEventType = async (id: string, data: { name?: string; color?: string; icon?: string }) => {
+    const updated = await api.updateEventType(id, data);
+    await fetchCalendarData();
+    return updated;
+  };
+
+  const deleteEventType = async (id: string) => {
+    await api.deleteEventType(id);
+    await fetchCalendarData();
+  };
+
   return (
     <CalendarContext.Provider
       value={{
         calendars,
         events,
         filteredEvents,
+        eventTypes,
         currentDate,
         viewMode,
         selectedEvent,
@@ -215,6 +245,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         updateCalendar,
         deleteCalendar,
         triggerGoogleSync,
+        createEventType,
+        updateEventType,
+        deleteEventType,
       }}
     >
       {children}
